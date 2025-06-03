@@ -1,0 +1,76 @@
+# 实验基本信息
+name: "basic_verilog_generation"
+description: "Basic experiment for Verilog code generation with autonomous agents"
+
+# LLM配置
+llm:
+  provider: "openai"
+  base_url: "https://api.openai.com/v1"  # 可以替换为兼容的API端点
+  api_key: "${OPENAI_API_KEY}"  # 从环境变量读取，或直接填写
+  model: "gpt-4"
+  temperature: 0.7
+  max_tokens: 2000
+  timeout: 60
+  retry_times: 3
+  retry_delay: 1
+
+# 系统配置
+system:
+  max_agents: 10
+  task_timeout: 300
+  coordination_interval: 10
+  enable_learning: true
+  enable_collaboration: true
+
+# 智能体配置
+agents:
+  coder_agent:
+    name: "AliceCoder"
+    role: "code_generator"
+    personality:
+      creative: 0.8
+      proactive: 0.7
+      detail_oriented: 0.6
+    communication_style: "creative"
+    learning_rate: 0.2
+    
+  reviewer_agent:
+    name: "BobReviewer"
+    role: "code_reviewer"
+    personality:
+      analytical: 0.9
+      critical: 0.8
+      helpful: 0.7
+    communication_style: "analytical"
+    learning_rate: 0.15
+    
+  executor_agent:
+    name: "CharlieExecutor"
+    role: "code_executor"
+    personality:
+      focused: 0.9
+      reliable: 0.9
+      efficient: 0.8
+    communication_style: "directive"
+    learning_rate: 0.1
+
+# 任务列表
+tasks:
+  - name: "4-bit Counter"
+    type: "code_generation"
+    task_type: "sequential"
+    requirements:
+      inputs: ["clk", "reset", "enable"]
+      outputs: ["count[3:0]"]
+      reset_type: "synchronous"
+      functionality: "up_counter"
+    priority: 0.8
+    
+  - name: "2-to-1 Multiplexer"
+    type: "code_generation"
+    task_type: "combinational"
+    requirements:
+      inputs: ["in0[7:0]", "in1[7:0]", "sel"]
+      outputs: ["out[7:0]"]
+      width: 8
+    priority: 0.6

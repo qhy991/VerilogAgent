@@ -1,0 +1,119 @@
+name: "advanced_collaborative_design"
+description: "Advanced experiment with multiple agents collaborating on complex designs"
+
+# LLM配置 - 使用本地模型
+llm:
+  provider: "openai"  # 接口兼容
+  base_url: "http://localhost:8080/v1"  # 本地LLM服务器
+  api_key: "local-key"
+  model: "llama-2-70b"
+  temperature: 0.8
+  max_tokens: 4000
+  timeout: 120
+
+# 高级系统配置
+system:
+  max_agents: 20
+  task_timeout: 600
+  coordination_interval: 5
+  enable_learning: true
+  enable_collaboration: true
+  collaboration_threshold: 0.7  # 任务复杂度超过此值时触发协作
+  load_balance_enabled: true
+  knowledge_sharing_interval: 300  # 5分钟
+
+# 多样化智能体团队
+agents:
+  senior_coder:
+    name: "SeniorAlice"
+    role: "code_generator"
+    personality:
+      creative: 0.9
+      proactive: 0.8
+      collaborative: 0.8
+      ambitious: 0.7
+    capabilities:
+      code_generation: 0.95
+      design_optimization: 0.8
+      system_integration: 0.7
+      
+  junior_coder:
+    name: "JuniorDave"
+    role: "code_generator"
+    personality:
+      curious: 0.9
+      helpful: 0.8
+      learning_oriented: 0.9
+    capabilities:
+      code_generation: 0.6
+      documentation: 0.8
+      
+  specialist_reviewer:
+    name: "SpecialistEve"
+    role: "code_reviewer"
+    personality:
+      analytical: 0.95
+      detail_oriented: 0.95
+      critical: 0.9
+    specialization: "timing_analysis"
+    
+  performance_executor:
+    name: "PerfCarl"
+    role: "code_executor"
+    personality:
+      focused: 0.9
+      efficient: 0.95
+    specialization: "performance_optimization"
+
+# 复杂任务序列
+tasks:
+  - name: "UART Transceiver"
+    type: "collaborative_design"
+    task_type: "complex_module"
+    collaboration_required: true
+    requirements:
+      modules: ["uart_tx", "uart_rx", "baud_generator", "fifo"]
+      baud_rates: [9600, 115200]
+      data_bits: [7, 8]
+      parity: ["none", "even", "odd"]
+      flow_control: true
+    subtasks:
+      - component: "uart_tx"
+        assigned_to: "senior_coder"
+      - component: "uart_rx"
+        assigned_to: "junior_coder"
+        mentor: "senior_coder"
+      - component: "integration"
+        collaborative: true
+    priority: 0.9
+    
+  - name: "FFT Processor"
+    type: "research_and_implement"
+    task_type: "complex_module"
+    phases:
+      - phase: "research"
+        duration: 300
+        agents: ["senior_coder", "specialist_reviewer"]
+      - phase: "design"
+        duration: 600
+        collaborative: true
+      - phase: "implementation"
+        parallel_tasks: true
+      - phase: "optimization"
+        agents: ["performance_executor", "specialist_reviewer"]
+    requirements:
+      points: 256
+      architecture: "pipelined"
+      precision: "16-bit fixed"
+      throughput: "1 sample/clock"
+    priority: 0.95
+
+# 实验参数
+experiment_params:
+  duration: 3600  # 1小时
+  metrics_collection:
+    - task_completion_time
+    - collaboration_effectiveness
+    - code_quality_scores
+    - learning_progression
+  output_dir: "./experiment_results/advanced_collab/"

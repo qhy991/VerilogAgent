@@ -1,0 +1,33 @@
+name: "unit_test_experiment"
+description: "Minimal configuration for testing"
+
+llm:
+  provider: "openai"
+  base_url: "${LLM_BASE_URL}"  # 环境变量
+  api_key: "${LLM_API_KEY}"
+  model: "gpt-3.5-turbo"  # 更便宜的模型用于测试
+  temperature: 0.5
+  max_tokens: 1000
+
+system:
+  max_agents: 3
+  task_timeout: 60
+  enable_learning: false  # 测试时禁用学习
+
+agents:
+  test_coder:
+    name: "TestCoder"
+    role: "code_generator"
+    personality:
+      creative: 0.5
+      proactive: 0.5
+
+tasks:
+  - name: "Simple AND Gate"
+    type: "code_generation"
+    task_type: "simple_logic"
+    requirements:
+      inputs: ["a", "b"]
+      outputs: ["y"]
+      logic: "y = a & b"
+    priority: 0.5
