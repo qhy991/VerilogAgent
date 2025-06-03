@@ -761,1273 +761,1273 @@ Provide decisions in JSON format with action_type, target, priority, and reasoni
                self.logger.error(f"Error in social maintenance loop: {e}")
                await asyncio.sleep(300)
    
-   async def _learning_loop(self):
-       """持续学习循环"""
-       while self.behavior_loop_active:
-           try:
-               # 分析经验缓冲区
-               if len(self.experience_buffer) > 10:
-                   insights = await self.learning_system.analyze_experiences(
-                       list(self.experience_buffer)[-50:]
-                   )
-                   
-                   # 应用学习成果
-                   for insight in insights:
-                       await self._apply_learning_insight(insight)
-               
-               # 更新技能进展
-               await self.learning_system.update_skill_progression()
-               
-               await asyncio.sleep(600)  # 10分钟学习一次
-               
-           except Exception as e:
-               self.logger.error(f"Error in learning loop: {e}")
-               await asyncio.sleep(600)
+    async def _learning_loop(self):
+        """持续学习循环"""
+        while self.behavior_loop_active:
+            try:
+                # 分析经验缓冲区
+                if len(self.experience_buffer) > 10:
+                    insights = await self.learning_system.analyze_experiences(
+                        list(self.experience_buffer)[-50:]
+                    )
+                    
+                    # 应用学习成果
+                    for insight in insights:
+                        await self._apply_learning_insight(insight)
+                
+                # 更新技能进展
+                await self.learning_system.update_skill_progression()
+                
+                await asyncio.sleep(600)  # 10分钟学习一次
+                
+            except Exception as e:
+                self.logger.error(f"Error in learning loop: {e}")
+                await asyncio.sleep(600)
    
-   async def handle_message(self, message: UnifiedMessage) -> Optional[UnifiedMessage]:
-       """处理接收到的消息 - 无状态机依赖"""
-       try:
-           # 1. 意图识别
-           intent_result = self.intent_recognizer.recognize_intent(message)
-           message.intent = intent_result.intent
-           message.intent_confidence = intent_result.confidence
-           
-           # 2. 更新决策上下文
-           self.decision_context["pending_messages"].append({
-               "message": message,
-               "received_at": time.time(),
-               "intent": intent_result
-           })
-           
-           # 3. 基于意图和个性决定响应
-           response_decision = await self._decide_message_response(message, intent_result)
-           
-           # 4. 执行响应
-           if response_decision["should_respond"]:
-               response = await self._generate_response(message, response_decision)
-               
-               # 5. 通过智能路由发送响应
-               if response:
-                   await self.message_router.route_message(response, self.profile.name)
-               
-               return response
-           
-           return None
-           
-       except Exception as e:
-           self.logger.error(f"Error handling message: {e}")
-           return None
-   
-   async def _decide_message_response(self, message: UnifiedMessage, intent_result) -> Dict[str, Any]:
-       """决定如何响应消息"""
-       decision = {
-           "should_respond": True,
-           "response_type": "standard",
-           "priority": MessagePriority.NORMAL,
-           "reasoning": []
-       }
-       
-       # 基于意图类型决定
-       if intent_result.intent == MessageIntent.COLLABORATION_REQUEST:
-           # 检查是否应该接受协作
-           if self.profile.has_capacity() and self.profile.proactivity > 0.5:
-               decision["response_type"] = "accept_collaboration"
-               decision["reasoning"].append("capacity available and proactive")
-           else:
-               decision["response_type"] = "decline_collaboration"
-               decision["reasoning"].append("no capacity or low proactivity")
-       
-       elif intent_result.intent == MessageIntent.HELP_REQUEST:
-           # 基于个性决定是否提供帮助
-           if self.profile.personality_traits.get(PersonalityTrait.HELPFUL, 0.5) > 0.6:
-               decision["response_type"] = "provide_help"
-               decision["priority"] = MessagePriority.HIGH
-               decision["reasoning"].append("helpful personality")
-       
-       elif intent_result.intent == MessageIntent.INFORMATION_QUERY:
-           # 总是响应信息查询
-           decision["response_type"] = "provide_information"
-           decision["reasoning"].append("information sharing")
-       
-       # 基于关系调整决策
-       sender_relationship = self.profile.social_connections.get(message.sender, 0.5)
-       if sender_relationship > 0.7:
-           decision["priority"] = MessagePriority.HIGH
-           decision["reasoning"].append("strong relationship")
-       elif sender_relationship < 0.3:
-           if decision["response_type"] == "standard":
-               decision["should_respond"] = False
-               decision["reasoning"].append("weak relationship")
-       
-       return decision
-   
-   async def _generate_response(self, original_message: UnifiedMessage, 
-                               response_decision: Dict[str, Any]) -> Optional[UnifiedMessage]:
-       """生成响应消息"""
-       response_type = response_decision["response_type"]
-       
-       if response_type == "accept_collaboration":
-           return self._create_collaboration_acceptance(original_message)
-       elif response_type == "decline_collaboration":
-           return self._create_collaboration_decline(original_message)
-       elif response_type == "provide_help":
-           return await self._create_help_response(original_message)
-       elif response_type == "provide_information":
-           return await self._create_information_response(original_message)
-       else:
-           return self._create_standard_response(original_message)
-   
-   def _create_collaboration_acceptance(self, request: UnifiedMessage) -> UnifiedMessage:
-       """创建协作接受响应"""
-       return UnifiedMessage(
-           type="collaboration_response",
-           content={
-               "accepted": True,
-               "agent_name": self.profile.name,
-               "available_capabilities": [cap.value for cap in self.profile.capabilities.keys()],
-               "message": f"Happy to collaborate! My {self.profile.communication_style.value} approach should work well here."
-           },
-           sender=self.profile.name,
-           receivers=[request.sender],
-           priority=MessagePriority.HIGH,
-           intent=MessageIntent.COLLABORATION_RESPONSE,
-           conversation_id=request.conversation_id
-       )
-   
-   async def initiate_collaboration(self, task: UnifiedTask, partners: List[str]) -> str:
-       """发起协作 - 无状态机"""
-       # 创建对话
-       conversation_id = await self.conversation_manager.create_conversation(
-           participants=partners,
-           dialogue_type=DialogueType.TASK_COLLABORATION,
-           subject=f"Collaboration for {task.description}",
-           task_objective=task.task_id
-       )
-       
-       # 发送协作邀请
-       invitation = UnifiedMessage(
-           type="collaboration_invitation",
-           content={
-               "task": asdict(task),
-               "initiator": self.profile.name,
-               "proposed_approach": self._generate_collaboration_approach(task),
-               "expected_contributions": self._identify_expected_contributions(task, partners)
-           },
-           sender=self.profile.name,
-           receivers=partners,
-           priority=MessagePriority.HIGH,
-           intent=MessageIntent.COLLABORATION_REQUEST,
-           conversation_id=conversation_id,
-           required_capabilities=task.required_capabilities
-       )
-       
-       await self.message_router.route_message(invitation, self.profile.name)
-       
-       # 记录到活跃对话
-       self.active_conversations[conversation_id] = {
-           "task": task,
-           "partners": partners,
-           "initiated_at": time.time(),
-           "status": "pending_responses"
-       }
-       
-       return conversation_id
-   
-   def _generate_collaboration_approach(self, task: UnifiedTask) -> str:
-       """生成协作方案"""
-       if self.profile.communication_style == CommunicationStyle.ANALYTICAL:
-           return f"Systematic analysis of {task.task_type.value} requirements followed by structured implementation"
-       elif self.profile.communication_style == CommunicationStyle.CREATIVE:
-           return f"Innovative approach to {task.task_type.value} with emphasis on novel solutions"
-       else:
-           return f"Collaborative development of {task.task_type.value} with regular coordination"
-   
-   def _identify_expected_contributions(self, task: UnifiedTask, partners: List[str]) -> Dict[str, List[str]]:
-       """识别期望的贡献"""
-       contributions = {}
-       
-       # 基于任务需求分配期望贡献
-       if task.task_type in [TaskType.COMPLEX_MODULE, TaskType.SEQUENTIAL]:
-           contributions[self.profile.name] = ["design", "implementation"]
-           for partner in partners:
-               contributions[partner] = ["review", "verification"]
-       else:
-           contributions[self.profile.name] = ["primary development"]
-           for partner in partners:
-               contributions[partner] = ["support", "quality assurance"]
-       
-       return contributions
+    async def handle_message(self, message: UnifiedMessage) -> Optional[UnifiedMessage]:
+        """处理接收到的消息 - 无状态机依赖"""
+        try:
+            # 1. 意图识别
+            intent_result = self.intent_recognizer.recognize_intent(message)
+            message.intent = intent_result.intent
+            message.intent_confidence = intent_result.confidence
+            
+            # 2. 更新决策上下文
+            self.decision_context["pending_messages"].append({
+                "message": message,
+                "received_at": time.time(),
+                "intent": intent_result
+            })
+            
+            # 3. 基于意图和个性决定响应
+            response_decision = await self._decide_message_response(message, intent_result)
+            
+            # 4. 执行响应
+            if response_decision["should_respond"]:
+                response = await self._generate_response(message, response_decision)
+                
+                # 5. 通过智能路由发送响应
+                if response:
+                    await self.message_router.route_message(response, self.profile.name)
+                
+                return response
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error handling message: {e}")
+            return None
+    
+    async def _decide_message_response(self, message: UnifiedMessage, intent_result) -> Dict[str, Any]:
+        """决定如何响应消息"""
+        decision = {
+            "should_respond": True,
+            "response_type": "standard",
+            "priority": MessagePriority.NORMAL,
+            "reasoning": []
+        }
+        
+        # 基于意图类型决定
+        if intent_result.intent == MessageIntent.COLLABORATION_REQUEST:
+            # 检查是否应该接受协作
+            if self.profile.has_capacity() and self.profile.proactivity > 0.5:
+                decision["response_type"] = "accept_collaboration"
+                decision["reasoning"].append("capacity available and proactive")
+            else:
+                decision["response_type"] = "decline_collaboration"
+                decision["reasoning"].append("no capacity or low proactivity")
+        
+        elif intent_result.intent == MessageIntent.HELP_REQUEST:
+            # 基于个性决定是否提供帮助
+            if self.profile.personality_traits.get(PersonalityTrait.HELPFUL, 0.5) > 0.6:
+                decision["response_type"] = "provide_help"
+                decision["priority"] = MessagePriority.HIGH
+                decision["reasoning"].append("helpful personality")
+        
+        elif intent_result.intent == MessageIntent.INFORMATION_QUERY:
+            # 总是响应信息查询
+            decision["response_type"] = "provide_information"
+            decision["reasoning"].append("information sharing")
+        
+        # 基于关系调整决策
+        sender_relationship = self.profile.social_connections.get(message.sender, 0.5)
+        if sender_relationship > 0.7:
+            decision["priority"] = MessagePriority.HIGH
+            decision["reasoning"].append("strong relationship")
+        elif sender_relationship < 0.3:
+            if decision["response_type"] == "standard":
+                decision["should_respond"] = False
+                decision["reasoning"].append("weak relationship")
+        
+        return decision
+    
+    async def _generate_response(self, original_message: UnifiedMessage, 
+                                response_decision: Dict[str, Any]) -> Optional[UnifiedMessage]:
+        """生成响应消息"""
+        response_type = response_decision["response_type"]
+        
+        if response_type == "accept_collaboration":
+            return self._create_collaboration_acceptance(original_message)
+        elif response_type == "decline_collaboration":
+            return self._create_collaboration_decline(original_message)
+        elif response_type == "provide_help":
+            return await self._create_help_response(original_message)
+        elif response_type == "provide_information":
+            return await self._create_information_response(original_message)
+        else:
+            return self._create_standard_response(original_message)
+    
+    def _create_collaboration_acceptance(self, request: UnifiedMessage) -> UnifiedMessage:
+        """创建协作接受响应"""
+        return UnifiedMessage(
+            type="collaboration_response",
+            content={
+                "accepted": True,
+                "agent_name": self.profile.name,
+                "available_capabilities": [cap.value for cap in self.profile.capabilities.keys()],
+                "message": f"Happy to collaborate! My {self.profile.communication_style.value} approach should work well here."
+            },
+            sender=self.profile.name,
+            receivers=[request.sender],
+            priority=MessagePriority.HIGH,
+            intent=MessageIntent.COLLABORATION_RESPONSE,
+            conversation_id=request.conversation_id
+        )
+    
+    async def initiate_collaboration(self, task: UnifiedTask, partners: List[str]) -> str:
+        """发起协作 - 无状态机"""
+        # 创建对话
+        conversation_id = await self.conversation_manager.create_conversation(
+            participants=partners,
+            dialogue_type=DialogueType.TASK_COLLABORATION,
+            subject=f"Collaboration for {task.description}",
+            task_objective=task.task_id
+        )
+        
+        # 发送协作邀请
+        invitation = UnifiedMessage(
+            type="collaboration_invitation",
+            content={
+                "task": asdict(task),
+                "initiator": self.profile.name,
+                "proposed_approach": self._generate_collaboration_approach(task),
+                "expected_contributions": self._identify_expected_contributions(task, partners)
+            },
+            sender=self.profile.name,
+            receivers=partners,
+            priority=MessagePriority.HIGH,
+            intent=MessageIntent.COLLABORATION_REQUEST,
+            conversation_id=conversation_id,
+            required_capabilities=task.required_capabilities
+        )
+        
+        await self.message_router.route_message(invitation, self.profile.name)
+        
+        # 记录到活跃对话
+        self.active_conversations[conversation_id] = {
+            "task": task,
+            "partners": partners,
+            "initiated_at": time.time(),
+            "status": "pending_responses"
+        }
+        
+        return conversation_id
+    
+    def _generate_collaboration_approach(self, task: UnifiedTask) -> str:
+        """生成协作方案"""
+        if self.profile.communication_style == CommunicationStyle.ANALYTICAL:
+            return f"Systematic analysis of {task.task_type.value} requirements followed by structured implementation"
+        elif self.profile.communication_style == CommunicationStyle.CREATIVE:
+            return f"Innovative approach to {task.task_type.value} with emphasis on novel solutions"
+        else:
+            return f"Collaborative development of {task.task_type.value} with regular coordination"
+    
+    def _identify_expected_contributions(self, task: UnifiedTask, partners: List[str]) -> Dict[str, List[str]]:
+        """识别期望的贡献"""
+        contributions = {}
+        
+        # 基于任务需求分配期望贡献
+        if task.task_type in [TaskType.COMPLEX_MODULE, TaskType.SEQUENTIAL]:
+            contributions[self.profile.name] = ["design", "implementation"]
+            for partner in partners:
+                contributions[partner] = ["review", "verification"]
+        else:
+            contributions[self.profile.name] = ["primary development"]
+            for partner in partners:
+                contributions[partner] = ["support", "quality assurance"]
+        
+        return contributions
 
 # ============================================================================
 # 5. 能力发现引擎 - 来自stage_one
 # ============================================================================
 
 class CapabilityDiscoveryEngine:
-   """能力发现引擎 - 集成版"""
-   
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"CapabilityDiscovery.{agent.profile.name}")
-       
-       # 能力发现历史
-       self.discovery_history = deque(maxlen=100)
-       self.capability_assessments: Dict[str, float] = {}
-   
-   async def discover_capabilities(self, target_agent: str = None) -> Dict[AgentCapability, float]:
-       """发现能力"""
-       if target_agent is None:
-           # 自我能力评估
-           return await self._self_capability_assessment()
-       else:
-           # 评估其他智能体能力
-           return await self._peer_capability_assessment(target_agent)
-   
-   async def _self_capability_assessment(self) -> Dict[AgentCapability, float]:
-       """自我能力评估"""
-       assessment = {}
-       
-       # 基于角色的基础能力
-       role_capabilities = self._get_role_based_capabilities()
-       assessment.update(role_capabilities)
-       
-       # 基于经验的能力调整
-       experience_adjustments = self._calculate_experience_adjustments()
-       for cap, adjustment in experience_adjustments.items():
-           if cap in assessment:
-               assessment[cap] = min(1.0, assessment[cap] + adjustment)
-       
-       # 更新档案
-       self.agent.profile.capabilities.update(assessment)
-       
-       return assessment
-   
-   def _get_role_based_capabilities(self) -> Dict[AgentCapability, float]:
-       """基于角色的能力映射"""
-       role_map = {
-           AgentRole.CODE_GENERATOR: {
-               AgentCapability.CODE_GENERATION: 0.9,
-               AgentCapability.CODE_DEBUGGING: 0.7,
-               AgentCapability.DOCUMENTATION: 0.6
-           },
-           AgentRole.CODE_REVIEWER: {
-               AgentCapability.CODE_REVIEW: 0.9,
-               AgentCapability.ERROR_ANALYSIS: 0.8,
-               AgentCapability.CODE_OPTIMIZATION: 0.7
-           },
-           AgentRole.CODE_EXECUTOR: {
-               AgentCapability.COMPILATION: 0.9,
-               AgentCapability.SIMULATION: 0.9,
-               AgentCapability.TEST_GENERATION: 0.6
-           }
-       }
-       
-       return role_map.get(self.agent.profile.role, {})
+    """能力发现引擎 - 集成版"""
+    
+    def __init__(self, agent: AutonomousAgent):
+        self.agent = agent
+        self.logger = logging.getLogger(f"CapabilityDiscovery.{agent.profile.name}")
+        
+        # 能力发现历史
+        self.discovery_history = deque(maxlen=100)
+        self.capability_assessments: Dict[str, float] = {}
+    
+    async def discover_capabilities(self, target_agent: str = None) -> Dict[AgentCapability, float]:
+        """发现能力"""
+        if target_agent is None:
+            # 自我能力评估
+            return await self._self_capability_assessment()
+        else:
+            # 评估其他智能体能力
+            return await self._peer_capability_assessment(target_agent)
+    
+    async def _self_capability_assessment(self) -> Dict[AgentCapability, float]:
+        """自我能力评估"""
+        assessment = {}
+        
+        # 基于角色的基础能力
+        role_capabilities = self._get_role_based_capabilities()
+        assessment.update(role_capabilities)
+        
+        # 基于经验的能力调整
+        experience_adjustments = self._calculate_experience_adjustments()
+        for cap, adjustment in experience_adjustments.items():
+            if cap in assessment:
+                assessment[cap] = min(1.0, assessment[cap] + adjustment)
+        
+        # 更新档案
+        self.agent.profile.capabilities.update(assessment)
+        
+        return assessment
+    
+    def _get_role_based_capabilities(self) -> Dict[AgentCapability, float]:
+        """基于角色的能力映射"""
+        role_map = {
+            AgentRole.CODE_GENERATOR: {
+                AgentCapability.CODE_GENERATION: 0.9,
+                AgentCapability.CODE_DEBUGGING: 0.7,
+                AgentCapability.DOCUMENTATION: 0.6
+            },
+            AgentRole.CODE_REVIEWER: {
+                AgentCapability.CODE_REVIEW: 0.9,
+                AgentCapability.ERROR_ANALYSIS: 0.8,
+                AgentCapability.CODE_OPTIMIZATION: 0.7
+            },
+            AgentRole.CODE_EXECUTOR: {
+                AgentCapability.COMPILATION: 0.9,
+                AgentCapability.SIMULATION: 0.9,
+                AgentCapability.TEST_GENERATION: 0.6
+            }
+        }
+        
+        return role_map.get(self.agent.profile.role, {})
 
 # ============================================================================
 # 6. 协作选择器 - 来自stage_one
 # ============================================================================
 
 class CollaborationSelector:
-   """智能协作选择器"""
+    """智能协作选择器"""
    
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"CollaborationSelector.{agent.profile.name}")
-   
-   async def select_partners(self, task: UnifiedTask, available_agents: List[str]) -> List[str]:
-       """选择协作伙伴"""
-       partner_scores = []
-       
-       for candidate in available_agents:
-           if candidate == self.agent.profile.name:
-               continue
-           
-           score = await self._evaluate_partner(candidate, task)
-           if score > 0.5:
-               partner_scores.append((candidate, score))
-       
-       # 按分数排序并选择前N个
-       partner_scores.sort(key=lambda x: x[1], reverse=True)
-       max_partners = min(3, len(partner_scores))
-       
-       return [partner for partner, score in partner_scores[:max_partners]]
-   
-   async def _evaluate_partner(self, candidate: str, task: UnifiedTask) -> float:
-       """评估潜在伙伴"""
-       score = 0.0
-       
-       # 历史合作成功率
-       history_score = self.agent.profile.collaboration_history.get(candidate, 0.5)
-       score += history_score * 0.4
-       
-       # 社交连接强度
-       social_score = self.agent.profile.social_connections.get(candidate, 0.5)
-       score += social_score * 0.3
-       
-       # 能力匹配（需要从系统获取）
-       capability_match = await self._assess_capability_match(candidate, task)
-       score += capability_match * 0.3
-       
-       return score
-   
-   async def _assess_capability_match(self, candidate: str, task: UnifiedTask) -> float:
-       """评估能力匹配度"""
-       # 简化实现 - 实际应该查询候选者的能力
-       return 0.7
+    def __init__(self, agent: AutonomousAgent):
+        self.agent = agent
+        self.logger = logging.getLogger(f"CollaborationSelector.{agent.profile.name}")
+    
+    async def select_partners(self, task: UnifiedTask, available_agents: List[str]) -> List[str]:
+        """选择协作伙伴"""
+        partner_scores = []
+        
+        for candidate in available_agents:
+            if candidate == self.agent.profile.name:
+                continue
+            
+            score = await self._evaluate_partner(candidate, task)
+            if score > 0.5:
+                partner_scores.append((candidate, score))
+        
+        # 按分数排序并选择前N个
+        partner_scores.sort(key=lambda x: x[1], reverse=True)
+        max_partners = min(3, len(partner_scores))
+        
+        return [partner for partner, score in partner_scores[:max_partners]]
+    
+    async def _evaluate_partner(self, candidate: str, task: UnifiedTask) -> float:
+        """评估潜在伙伴"""
+        score = 0.0
+        
+        # 历史合作成功率
+        history_score = self.agent.profile.collaboration_history.get(candidate, 0.5)
+        score += history_score * 0.4
+        
+        # 社交连接强度
+        social_score = self.agent.profile.social_connections.get(candidate, 0.5)
+        score += social_score * 0.3
+        
+        # 能力匹配（需要从系统获取）
+        capability_match = await self._assess_capability_match(candidate, task)
+        score += capability_match * 0.3
+        
+        return score
+    
+    async def _assess_capability_match(self, candidate: str, task: UnifiedTask) -> float:
+        """评估能力匹配度"""
+        # 简化实现 - 实际应该查询候选者的能力
+        return 0.7
 
 # ============================================================================
 # 7. 对话管理器 - 来自stage_two
 # ============================================================================
 
 class ConversationManager:
-   """对话管理器 - 集成版"""
-   
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"ConversationManager.{agent.profile.name}")
-       self.conversations: Dict[str, Dict[str, Any]] = {}
-   
-   async def create_conversation(self, participants: List[str], dialogue_type: DialogueType,
-                               subject: str, task_objective: str = None) -> str:
-       """创建对话"""
-       conversation_id = f"conv_{self.agent.profile.name}_{int(time.time())}"
-       
-       self.conversations[conversation_id] = {
-           "id": conversation_id,
-           "participants": participants + [self.agent.profile.name],
-           "dialogue_type": dialogue_type,
-           "subject": subject,
-           "task_objective": task_objective,
-           "state": ConversationState.INITIATED,
-           "created_at": time.time(),
-           "messages": [],
-           "shared_context": {},
-           "progress": 0.0
-       }
-       
-       return conversation_id
-   
-   async def update_conversation_progress(self, conversation_id: str, progress: float):
-       """更新对话进度"""
-       if conversation_id in self.conversations:
-           self.conversations[conversation_id]["progress"] = progress
-           
-           # 检查是否完成
-           if progress >= 100.0:
-               self.conversations[conversation_id]["state"] = ConversationState.COMPLETED
+    """对话管理器 - 集成版"""
+    
+    def __init__(self, agent: AutonomousAgent):
+        self.agent = agent
+        self.logger = logging.getLogger(f"ConversationManager.{agent.profile.name}")
+        self.conversations: Dict[str, Dict[str, Any]] = {}
+    
+    async def create_conversation(self, participants: List[str], dialogue_type: DialogueType,
+                                subject: str, task_objective: str = None) -> str:
+        """创建对话"""
+        conversation_id = f"conv_{self.agent.profile.name}_{int(time.time())}"
+        
+        self.conversations[conversation_id] = {
+            "id": conversation_id,
+            "participants": participants + [self.agent.profile.name],
+            "dialogue_type": dialogue_type,
+            "subject": subject,
+            "task_objective": task_objective,
+            "state": ConversationState.INITIATED,
+            "created_at": time.time(),
+            "messages": [],
+            "shared_context": {},
+            "progress": 0.0
+        }
+        
+        return conversation_id
+    
+    async def update_conversation_progress(self, conversation_id: str, progress: float):
+        """更新对话进度"""
+        if conversation_id in self.conversations:
+            self.conversations[conversation_id]["progress"] = progress
+            
+            # 检查是否完成
+            if progress >= 100.0:
+                self.conversations[conversation_id]["state"] = ConversationState.COMPLETED
 
 # ============================================================================
 # 8. 智能消息路由器 - 来自stage_three
 # ============================================================================
 
 class IntelligentMessageRouter:
-   """智能消息路由器 - 集成版"""
+    """智能消息路由器 - 集成版"""
    
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"MessageRouter.{agent.profile.name}")
-       self.routing_history = deque(maxlen=100)
-   
-   async def route_message(self, message: UnifiedMessage, sender: str) -> List[str]:
-       """智能路由消息"""
-       # 基于意图的路由
-       if message.intent == MessageIntent.COLLABORATION_REQUEST:
-           # 路由到有能力的智能体
-           return await self._route_by_capability(message)
-       
-       elif message.intent == MessageIntent.HELP_REQUEST:
-           # 路由到专家
-           return await self._route_to_experts(message)
-       
-       elif message.intent in [MessageIntent.STATUS_REPORT, MessageIntent.PROGRESS_UPDATE]:
-           # 广播到相关方
-           return await self._route_to_stakeholders(message)
-       
-       else:
-           # 默认路由
-           return message.receivers if message.receivers else []
-   
-   async def _route_by_capability(self, message: UnifiedMessage) -> List[str]:
-       """基于能力路由"""
-       required_caps = message.required_capabilities
-       if not required_caps:
-           return []
-       
-       # 查找具有所需能力的智能体
-       capable_agents = await self.agent.system_coordinator.find_agents_with_capabilities(required_caps)
-       return capable_agents[:3]  # 最多3个
+    def __init__(self, agent: AutonomousAgent):
+        self.agent = agent
+        self.logger = logging.getLogger(f"MessageRouter.{agent.profile.name}")
+        self.routing_history = deque(maxlen=100)
+    
+    async def route_message(self, message: UnifiedMessage, sender: str) -> List[str]:
+        """智能路由消息"""
+        # 基于意图的路由
+        if message.intent == MessageIntent.COLLABORATION_REQUEST:
+            # 路由到有能力的智能体
+            return await self._route_by_capability(message)
+        
+        elif message.intent == MessageIntent.HELP_REQUEST:
+            # 路由到专家
+            return await self._route_to_experts(message)
+        
+        elif message.intent in [MessageIntent.STATUS_REPORT, MessageIntent.PROGRESS_UPDATE]:
+            # 广播到相关方
+            return await self._route_to_stakeholders(message)
+        
+        else:
+            # 默认路由
+            return message.receivers if message.receivers else []
+    
+    async def _route_by_capability(self, message: UnifiedMessage) -> List[str]:
+        """基于能力路由"""
+        required_caps = message.required_capabilities
+        if not required_caps:
+            return []
+        
+        # 查找具有所需能力的智能体
+        capable_agents = await self.agent.system_coordinator.find_agents_with_capabilities(required_caps)
+        return capable_agents[:3]  # 最多3个
 
 # ============================================================================
 # 9. 意图识别引擎 - 来自stage_three
 # ============================================================================
 
 class IntentRecognitionEngine:
-   """意图识别引擎 - 集成版"""
+    """意图识别引擎 - 集成版"""
    
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"IntentRecognition.{agent.profile.name}")
-       self.intent_patterns = self._initialize_patterns()
-   
-   def _initialize_patterns(self) -> Dict[MessageIntent, List[Dict[str, Any]]]:
-       """初始化意图模式"""
-       return {
-           MessageIntent.TASK_REQUEST: [
-               {"keywords": ["generate", "create", "implement"], "confidence": 0.8}
-           ],
-           MessageIntent.ERROR_REPORT: [
-               {"keywords": ["error", "fail", "exception"], "confidence": 0.9}
-           ],
-           MessageIntent.COLLABORATION_REQUEST: [
-               {"keywords": ["help", "collaborate", "together"], "confidence": 0.7}
-           ]
-       }
-   
-   def recognize_intent(self, message: UnifiedMessage):
-       """识别消息意图"""
-       class IntentResult:
-           def __init__(self, intent, confidence):
-               self.intent = intent
-               self.confidence = confidence
-       
-       # 简化的意图识别
-       content_str = str(message.content).lower()
-       
-       best_intent = MessageIntent.UNKNOWN
-       best_confidence = 0.0
-       
-       for intent, patterns in self.intent_patterns.items():
-           for pattern in patterns:
-               keywords = pattern["keywords"]
-               if any(keyword in content_str for keyword in keywords):
-                   confidence = pattern["confidence"]
-                   if confidence > best_confidence:
-                       best_intent = intent
-                       best_confidence = confidence
-       
-       return IntentResult(best_intent, best_confidence)
+    def __init__(self, agent: AutonomousAgent):
+        self.agent = agent
+        self.logger = logging.getLogger(f"IntentRecognition.{agent.profile.name}")
+        self.intent_patterns = self._initialize_patterns()
+    
+    def _initialize_patterns(self) -> Dict[MessageIntent, List[Dict[str, Any]]]:
+        """初始化意图模式"""
+        return {
+            MessageIntent.TASK_REQUEST: [
+                {"keywords": ["generate", "create", "implement"], "confidence": 0.8}
+            ],
+            MessageIntent.ERROR_REPORT: [
+                {"keywords": ["error", "fail", "exception"], "confidence": 0.9}
+            ],
+            MessageIntent.COLLABORATION_REQUEST: [
+                {"keywords": ["help", "collaborate", "together"], "confidence": 0.7}
+            ]
+        }
+    
+    def recognize_intent(self, message: UnifiedMessage):
+        """识别消息意图"""
+        class IntentResult:
+            def __init__(self, intent, confidence):
+                self.intent = intent
+                self.confidence = confidence
+        
+        # 简化的意图识别
+        content_str = str(message.content).lower()
+        
+        best_intent = MessageIntent.UNKNOWN
+        best_confidence = 0.0
+        
+        for intent, patterns in self.intent_patterns.items():
+            for pattern in patterns:
+                keywords = pattern["keywords"]
+                if any(keyword in content_str for keyword in keywords):
+                    confidence = pattern["confidence"]
+                    if confidence > best_confidence:
+                        best_intent = intent
+                        best_confidence = confidence
+        
+        return IntentResult(best_intent, best_confidence)
 
 # ============================================================================
 # 10. 学习系统 - 增强版
 # ============================================================================
 
 class AgentLearningSystem:
-   """智能体学习系统 - 增强版"""
-   
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"LearningSystem.{agent.profile.name}")
-       self.skill_progression_history = deque(maxlen=1000)
-   
-   async def update_from_experience(self):
-       """从经验更新"""
-       recent_experiences = list(self.agent.experience_buffer)[-20:]
-       
-       if not recent_experiences:
-           return
-       
-       # 分析成功率
-       successes = sum(1 for exp in recent_experiences if exp.get("success", False))
-       success_rate = successes / len(recent_experiences) if recent_experiences else 0
-       
-       # 更新档案成功率
-       self.agent.profile.success_rate = (
-           self.agent.profile.learning_rate * success_rate + 
-           (1 - self.agent.profile.learning_rate) * self.agent.profile.success_rate
-       )
-       
-       # 调整行为参数
-       if success_rate < 0.4:
-           # 降低主动性
-           self.agent.profile.proactivity = max(0.3, self.agent.profile.proactivity - 0.05)
-       elif success_rate > 0.8:
-           # 提高主动性
-           self.agent.profile.proactivity = min(1.0, self.agent.profile.proactivity + 0.05)
-   
-   async def analyze_experiences(self, experiences: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-       """分析经验获得洞察"""
-       insights = []
-       
-       # 分析任务类型成功率
-       task_performance = defaultdict(lambda: {"attempts": 0, "successes": 0})
-       for exp in experiences:
-           if "task_type" in exp:
-               task_type = exp["task_type"]
-               task_performance[task_type]["attempts"] += 1
-               if exp.get("success", False):
-                   task_performance[task_type]["successes"] += 1
-       
-       # 生成洞察
-       for task_type, perf in task_performance.items():
-           if perf["attempts"] > 3:
-               success_rate = perf["successes"] / perf["attempts"]
-               if success_rate > 0.8:
-                   insights.append({
-                       "type": "high_performance",
-                       "task_type": task_type,
-                       "recommendation": "seek_more_similar_tasks"
-                   })
-               elif success_rate < 0.4:
-                   insights.append({
-                       "type": "low_performance",
-                       "task_type": task_type,
-                       "recommendation": "seek_learning_opportunities"
-                   })
-       
-       return insights
-   
-   async def update_skill_progression(self):
-       """更新技能进展"""
-       for skill, progression in self.agent.profile.skill_progression.items():
-           # 基于使用频率和成功率更新
-           if progression > 1.0:  # 升级阈值
-               await self._upgrade_capability(skill)
+    """智能体学习系统 - 增强版"""
+    
+    def __init__(self, agent: AutonomousAgent):
+        self.agent = agent
+        self.logger = logging.getLogger(f"LearningSystem.{agent.profile.name}")
+        self.skill_progression_history = deque(maxlen=1000)
+    
+    async def update_from_experience(self):
+        """从经验更新"""
+        recent_experiences = list(self.agent.experience_buffer)[-20:]
+        
+        if not recent_experiences:
+            return
+        
+        # 分析成功率
+        successes = sum(1 for exp in recent_experiences if exp.get("success", False))
+        success_rate = successes / len(recent_experiences) if recent_experiences else 0
+        
+        # 更新档案成功率
+        self.agent.profile.success_rate = (
+            self.agent.profile.learning_rate * success_rate + 
+            (1 - self.agent.profile.learning_rate) * self.agent.profile.success_rate
+        )
+        
+        # 调整行为参数
+        if success_rate < 0.4:
+            # 降低主动性
+            self.agent.profile.proactivity = max(0.3, self.agent.profile.proactivity - 0.05)
+        elif success_rate > 0.8:
+            # 提高主动性
+            self.agent.profile.proactivity = min(1.0, self.agent.profile.proactivity + 0.05)
+    
+    async def analyze_experiences(self, experiences: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """分析经验获得洞察"""
+        insights = []
+        
+        # 分析任务类型成功率
+        task_performance = defaultdict(lambda: {"attempts": 0, "successes": 0})
+        for exp in experiences:
+            if "task_type" in exp:
+                task_type = exp["task_type"]
+                task_performance[task_type]["attempts"] += 1
+                if exp.get("success", False):
+                    task_performance[task_type]["successes"] += 1
+        
+        # 生成洞察
+        for task_type, perf in task_performance.items():
+            if perf["attempts"] > 3:
+                success_rate = perf["successes"] / perf["attempts"]
+                if success_rate > 0.8:
+                    insights.append({
+                        "type": "high_performance",
+                        "task_type": task_type,
+                        "recommendation": "seek_more_similar_tasks"
+                    })
+                elif success_rate < 0.4:
+                    insights.append({
+                        "type": "low_performance",
+                        "task_type": task_type,
+                        "recommendation": "seek_learning_opportunities"
+                    })
+        
+        return insights
+    
+    async def update_skill_progression(self):
+        """更新技能进展"""
+        for skill, progression in self.agent.profile.skill_progression.items():
+            # 基于使用频率和成功率更新
+            if progression > 1.0:  # 升级阈值
+                await self._upgrade_capability(skill)
 
 # ============================================================================
 # 11. 社交网络管理器
 # ============================================================================
 
 class SocialNetworkManager:
-   """社交网络管理器"""
-   
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"SocialNetwork.{agent.profile.name}")
-       self.interaction_history = deque(maxlen=500)
-   
-   async def maintain_connections(self):
-       """维护社交连接"""
-       # 自然衰减
-       for partner in list(self.agent.profile.social_connections.keys()):
-           current_strength = self.agent.profile.social_connections[partner]
-           # 每次维护时轻微衰减
-           new_strength = max(0.1, current_strength - 0.02)
-           self.agent.profile.social_connections[partner] = new_strength
-   
-   def get_weak_connections(self, threshold: float = 0.3) -> List[str]:
-       """获取弱连接"""
-       return [
-           partner for partner, strength in self.agent.profile.social_connections.items()
-           if strength < threshold
-       ]
-   
-   def strengthen_connection(self, partner: str, interaction_quality: float):
-       """加强连接"""
-       current = self.agent.profile.social_connections.get(partner, 0.5)
-       # 基于交互质量增强
-       new_strength = min(1.0, current + interaction_quality * 0.1)
-       self.agent.profile.social_connections[partner] = new_strength
+    """社交网络管理器"""
+    
+    def __init__(self, agent: AutonomousAgent):
+        self.agent = agent
+        self.logger = logging.getLogger(f"SocialNetwork.{agent.profile.name}")
+        self.interaction_history = deque(maxlen=500)
+    
+    async def maintain_connections(self):
+        """维护社交连接"""
+        # 自然衰减
+        for partner in list(self.agent.profile.social_connections.keys()):
+            current_strength = self.agent.profile.social_connections[partner]
+            # 每次维护时轻微衰减
+            new_strength = max(0.1, current_strength - 0.02)
+            self.agent.profile.social_connections[partner] = new_strength
+    
+    def get_weak_connections(self, threshold: float = 0.3) -> List[str]:
+        """获取弱连接"""
+        return [
+            partner for partner, strength in self.agent.profile.social_connections.items()
+            if strength < threshold
+        ]
+    
+    def strengthen_connection(self, partner: str, interaction_quality: float):
+        """加强连接"""
+        current = self.agent.profile.social_connections.get(partner, 0.5)
+        # 基于交互质量增强
+        new_strength = min(1.0, current + interaction_quality * 0.1)
+        self.agent.profile.social_connections[partner] = new_strength
 
-# ============================================================================
-# 12. 性能监控器
-# ============================================================================
+    # ============================================================================
+    # 12. 性能监控器
+    # ============================================================================
 
-class PerformanceMonitor:
-   """性能监控器"""
-   
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"PerformanceMonitor.{agent.profile.name}")
-       self.metrics = {
-           "tasks_completed": 0,
-           "tasks_failed": 0,
-           "collaborations_successful": 0,
-           "average_response_time": 0.0,
-           "decision_accuracy": 0.0
-       }
-   
-   def record_task_completion(self, task_id: str, success: bool, duration: float):
-       """记录任务完成"""
-       if success:
-           self.metrics["tasks_completed"] += 1
-       else:
-           self.metrics["tasks_failed"] += 1
-       
-       # 更新平均响应时间
-       total_tasks = self.metrics["tasks_completed"] + self.metrics["tasks_failed"]
-       if total_tasks > 0:
-           self.metrics["average_response_time"] = (
-               (self.metrics["average_response_time"] * (total_tasks - 1) + duration) / total_tasks
-           )
+    class PerformanceMonitor:
+        """性能监控器"""
+        
+        def __init__(self, agent: AutonomousAgent):
+            self.agent = agent
+            self.logger = logging.getLogger(f"PerformanceMonitor.{agent.profile.name}")
+            self.metrics = {
+                "tasks_completed": 0,
+                "tasks_failed": 0,
+                "collaborations_successful": 0,
+                "average_response_time": 0.0,
+                "decision_accuracy": 0.0
+            }
+        
+        def record_task_completion(self, task_id: str, success: bool, duration: float):
+            """记录任务完成"""
+            if success:
+                self.metrics["tasks_completed"] += 1
+            else:
+                self.metrics["tasks_failed"] += 1
+            
+            # 更新平均响应时间
+            total_tasks = self.metrics["tasks_completed"] + self.metrics["tasks_failed"]
+            if total_tasks > 0:
+                self.metrics["average_response_time"] = (
+                    (self.metrics["average_response_time"] * (total_tasks - 1) + duration) / total_tasks
+                )
 
 # ============================================================================
 # 13. 系统协调器 - 增强版
 # ============================================================================
 
 class SystemCoordinator:
-   """系统协调器 - 管理整个多智能体系统"""
-   
-   def __init__(self):
-       self.logger = logging.getLogger("SystemCoordinator")
-       
-       # 系统状态
-       self.agents: Dict[str, AutonomousAgent] = {}
-       self.tasks: Dict[str, UnifiedTask] = {}
-       self.active_conversations: Dict[str, Dict[str, Any]] = {}
-       
-       # 任务管理
-       self.task_queue = deque()
-       self.completed_tasks = deque(maxlen=100)
-       
-       # 系统监控
-       self.system_metrics = {
-           "total_tasks": 0,
-           "completed_tasks": 0,
-           "failed_tasks": 0,
-           "active_agents": 0,
-           "system_efficiency": 0.0
-       }
-       
-       # 知识库
-       self.knowledge_base = KnowledgeBase()
-       
-       self.running = False
-       self.logger.info("SystemCoordinator initialized")
-   
-   async def start_system(self):
-       """启动系统"""
-       self.running = True
-       self.logger.info("Starting autonomous multi-agent system")
-       
-       # 启动系统循环
-       asyncio.create_task(self._system_coordination_loop())
-       
-       # 启动所有智能体
-       for agent in self.agents.values():
-           await agent.start_autonomous_operation()
-   
-   async def stop_system(self):
-       """停止系统"""
-       self.running = False
-       
-       # 停止所有智能体
-       for agent in self.agents.values():
-           agent.behavior_loop_active = False
-   
-   def register_agent(self, agent: AutonomousAgent):
-       """注册智能体"""
-       self.agents[agent.profile.name] = agent
-       self.system_metrics["active_agents"] = len(self.agents)
-       self.logger.info(f"Registered agent: {agent.profile.name} ({agent.profile.role.value})")
-   
-   async def submit_task(self, task_description: str, task_type: TaskType, 
-                        requirements: Dict[str, Any], priority: float = 0.5) -> str:
-       """提交任务"""
-       task_id = f"task_{int(time.time())}_{hashlib.md5(task_description.encode()).hexdigest()[:6]}"
-       
-       task = UnifiedTask(
-           task_id=task_id,
-           task_type=task_type,
-           description=task_description,
-           requirements=requirements,
-           priority=priority,
-           complexity=self._estimate_task_complexity(task_type, requirements),
-           required_capabilities=self._identify_required_capabilities(task_type)
-       )
-       
-       self.tasks[task_id] = task
-       self.task_queue.append(task)
-       self.system_metrics["total_tasks"] += 1
-       
-       self.logger.info(f"Task submitted: {task_id} ({task_type.value})")
-       
-       # 触发任务分配
-       await self._trigger_task_allocation(task)
-       
-       return task_id
-   
-   def _estimate_task_complexity(self, task_type: TaskType, requirements: Dict[str, Any]) -> float:
-       """估算任务复杂度"""
-       base_complexity = {
-           TaskType.SIMPLE_LOGIC: 0.2,
-           TaskType.COMBINATIONAL: 0.4,
-           TaskType.SEQUENTIAL: 0.6,
-           TaskType.COMPLEX_MODULE: 0.8,
-           TaskType.TESTBENCH: 0.5,
-           TaskType.OPTIMIZATION: 0.7
-       }
-       
-       complexity = base_complexity.get(task_type, 0.5)
-       
-       # 根据需求调整
-       if requirements.get("gates_count", 0) > 10:
-           complexity += 0.2
-       
-       return min(1.0, complexity)
-   
-   def _identify_required_capabilities(self, task_type: TaskType) -> Set[AgentCapability]:
-       """识别所需能力"""
-       capability_map = {
-           TaskType.SIMPLE_LOGIC: {AgentCapability.CODE_GENERATION},
-           TaskType.COMBINATIONAL: {AgentCapability.CODE_GENERATION, AgentCapability.VERIFICATION},
-           TaskType.SEQUENTIAL: {AgentCapability.DESIGN_OPTIMIZATION, AgentCapability.TIMING_ANALYSIS},
-           TaskType.COMPLEX_MODULE: {AgentCapability.SYSTEM_INTEGRATION, AgentCapability.VERIFICATION},
-           TaskType.TESTBENCH: {AgentCapability.TEST_GENERATION},
-           TaskType.OPTIMIZATION: {AgentCapability.CODE_OPTIMIZATION, AgentCapability.PERFORMANCE_ANALYSIS}
-       }
-       
-       return capability_map.get(task_type, set())
-   
-   async def _trigger_task_allocation(self, task: UnifiedTask):
-       """触发任务分配"""
-       # 通知所有智能体有新任务
-       notification = UnifiedMessage(
-           type="task_available",
-           content={
-               "task_id": task.task_id,
-               "task_type": task.task_type.value,
-               "complexity": task.complexity,
-               "priority": task.priority,
-               "required_capabilities": [cap.value for cap in task.required_capabilities]
-           },
-           sender="SystemCoordinator",
-           receivers=[agent.profile.name for agent in self.agents.values()],
-           priority=MessagePriority.HIGH if task.priority > 0.7 else MessagePriority.NORMAL,
-           intent=MessageIntent.TASK_ASSIGNMENT
-       )
-       
-       # 发送给所有智能体
-       for agent in self.agents.values():
-           await agent.handle_message(notification)
-   
-   async def _system_coordination_loop(self):
-       """系统协调循环"""
-       while self.running:
-           try:
-               # 监控系统健康
-               await self._monitor_system_health()
-               
-               # 处理待分配任务
-               await self._process_pending_tasks()
-               
-               # 更新系统指标
-               await self._update_system_metrics()
-               
-               # 知识共享
-               await self._facilitate_knowledge_sharing()
-               
-               await asyncio.sleep(10)  # 10秒循环一次
-               
-           except Exception as e:
-               self.logger.error(f"Error in system coordination loop: {e}")
-               await asyncio.sleep(10)
-   
-   async def _monitor_system_health(self):
-       """监控系统健康状况"""
-       # 检查智能体状态
-       overloaded_agents = []
-       idle_agents = []
-       
-       for agent_name, agent in self.agents.items():
-           if agent.profile.current_workload > 0.9:
-               overloaded_agents.append(agent_name)
-           elif agent.profile.current_workload < 0.2:
-               idle_agents.append(agent_name)
-       
-       # 负载均衡提醒
-       if overloaded_agents and idle_agents:
-           self.logger.warning(f"Load imbalance detected. Overloaded: {overloaded_agents}, Idle: {idle_agents}")
-           await self._suggest_load_balancing(overloaded_agents, idle_agents)
-   
-   async def _process_pending_tasks(self):
-       """处理待分配任务"""
-       if not self.task_queue:
-           return
-       
-       # 检查是否有任务长时间未分配
-       current_time = time.time()
-       for task in list(self.task_queue):
-           if current_time - task.created_at > 300 and task.status == "pending":  # 5分钟未分配
-               self.logger.warning(f"Task {task.task_id} pending for too long")
-               # 提高优先级重新通知
-               task.priority = min(1.0, task.priority + 0.2)
-               await self._trigger_task_allocation(task)
-   
-   async def _update_system_metrics(self):
-       """更新系统指标"""
-       if self.system_metrics["total_tasks"] > 0:
-           self.system_metrics["system_efficiency"] = (
-               self.system_metrics["completed_tasks"] / self.system_metrics["total_tasks"]
-           )
-       
-       # 计算平均任务完成时间
-       if self.completed_tasks:
-           avg_duration = sum(task.get_duration() for task in self.completed_tasks) / len(self.completed_tasks)
-           self.system_metrics["average_task_duration"] = avg_duration
-   
-   async def _facilitate_knowledge_sharing(self):
-       """促进知识共享"""
-       # 识别可共享的知识
-       valuable_knowledge = await self.knowledge_base.get_recent_insights()
-       
-       if valuable_knowledge:
-           # 创建知识共享消息
-           for knowledge_item in valuable_knowledge[:3]:  # 一次最多分享3个
-               share_message = UnifiedMessage(
-                   type="knowledge_sharing",
-                   content=knowledge_item,
-                   sender="SystemCoordinator",
-                   receivers=[agent.profile.name for agent in self.agents.values()],
-                   priority=MessagePriority.LOW,
-                   intent=MessageIntent.INFORMATION_SHARING
-               )
-               
-               # 发送给所有智能体
-               for agent in self.agents.values():
-                   if agent.profile.personality_traits.get(PersonalityTrait.CURIOUS, 0.5) > 0.6:
-                       await agent.handle_message(share_message)
-   
-   async def _suggest_load_balancing(self, overloaded: List[str], idle: List[str]):
-       """建议负载均衡"""
-       # 向过载智能体建议转移任务
-       for overloaded_agent in overloaded:
-           suggestion = UnifiedMessage(
-               type="load_balancing_suggestion",
-               content={
-                   "suggestion": "consider_task_delegation",
-                   "available_agents": idle,
-                   "reason": "workload_imbalance"
-               },
-               sender="SystemCoordinator",
-               receivers=[overloaded_agent],
-               priority=MessagePriority.HIGH,
-               intent=MessageIntent.SYSTEM_NOTIFICATION
-           )
-           
-           if overloaded_agent in self.agents:
-               await self.agents[overloaded_agent].handle_message(suggestion)
-   
-   # API方法
-   async def get_available_tasks(self) -> List[UnifiedTask]:
-       """获取可用任务列表"""
-       return [task for task in self.task_queue if task.status == "pending"]
-   
-   async def get_system_load(self) -> Dict[str, float]:
-       """获取系统负载"""
-       if not self.agents:
-           return {"average_load": 0.0, "peak_load": 0.0}
-       
-       loads = [agent.profile.current_workload for agent in self.agents.values()]
-       return {
-           "average_load": sum(loads) / len(loads) if loads else 0.0,
-           "peak_load": max(loads) if loads else 0.0
-       }
-   
-   async def get_peer_status(self) -> Dict[str, Dict[str, Any]]:
-       """获取同伴状态"""
-       return {
-           name: {
-               "role": agent.profile.role.value,
-               "workload": agent.profile.current_workload,
-               "availability": agent.profile.availability,
-               "capabilities": {cap.value: level for cap, level in agent.profile.capabilities.items()},
-               "communication_style": agent.profile.communication_style.value
-           }
-           for name, agent in self.agents.items()
-       }
-   
-   async def find_agents_with_capabilities(self, required_capabilities: Set[AgentCapability]) -> List[str]:
-       """查找具有特定能力的智能体"""
-       matching_agents = []
-       
-       for agent_name, agent in self.agents.items():
-           agent_caps = set(agent.profile.capabilities.keys())
-           if required_capabilities.issubset(agent_caps):
-               # 检查能力等级
-               sufficient_level = all(
-                   agent.profile.get_capability_level(cap) >= 0.6
-                   for cap in required_capabilities
-               )
-               if sufficient_level:
-                   matching_agents.append(agent_name)
-       
-       return matching_agents
-   
-   async def request_task_assignment(self, agent_name: str, task_id: str):
-       """处理任务分配请求"""
-       if task_id not in self.tasks or agent_name not in self.agents:
-           return
-       
-       task = self.tasks[task_id]
-       agent = self.agents[agent_name]
-       
-       # 检查智能体是否能处理该任务
-       if agent.profile.can_handle_task(task.task_type, task.complexity):
-           # 分配任务
-           task.assigned_agents.append(agent_name)
-           task.status = "assigned"
-           task.started_at = time.time()
-           
-           # 更新智能体工作负载
-           agent.profile.current_workload += task.complexity * 0.5
-           
-           # 从队列中移除
-           if task in self.task_queue:
-               self.task_queue.remove(task)
-           
-           self.logger.info(f"Task {task_id} assigned to {agent_name}")
-           
-           # 通知智能体
-           confirmation = UnifiedMessage(
-               type="task_assignment_confirmed",
-               content={
-                   "task_id": task_id,
-                   "task": asdict(task)
-               },
-               sender="SystemCoordinator",
-               receivers=[agent_name],
-               priority=MessagePriority.HIGH,
-               intent=MessageIntent.TASK_ASSIGNMENT
-           )
-           
-           await agent.handle_message(confirmation)
+    """系统协调器 - 管理整个多智能体系统"""
+    
+    def __init__(self):
+        self.logger = logging.getLogger("SystemCoordinator")
+        
+        # 系统状态
+        self.agents: Dict[str, AutonomousAgent] = {}
+        self.tasks: Dict[str, UnifiedTask] = {}
+        self.active_conversations: Dict[str, Dict[str, Any]] = {}
+        
+        # 任务管理
+        self.task_queue = deque()
+        self.completed_tasks = deque(maxlen=100)
+        
+        # 系统监控
+        self.system_metrics = {
+            "total_tasks": 0,
+            "completed_tasks": 0,
+            "failed_tasks": 0,
+            "active_agents": 0,
+            "system_efficiency": 0.0
+        }
+        
+        # 知识库
+        self.knowledge_base = KnowledgeBase()
+        
+        self.running = False
+        self.logger.info("SystemCoordinator initialized")
+    
+    async def start_system(self):
+        """启动系统"""
+        self.running = True
+        self.logger.info("Starting autonomous multi-agent system")
+        
+        # 启动系统循环
+        asyncio.create_task(self._system_coordination_loop())
+        
+        # 启动所有智能体
+        for agent in self.agents.values():
+            await agent.start_autonomous_operation()
+    
+    async def stop_system(self):
+        """停止系统"""
+        self.running = False
+        
+        # 停止所有智能体
+        for agent in self.agents.values():
+            agent.behavior_loop_active = False
+    
+    def register_agent(self, agent: AutonomousAgent):
+        """注册智能体"""
+        self.agents[agent.profile.name] = agent
+        self.system_metrics["active_agents"] = len(self.agents)
+        self.logger.info(f"Registered agent: {agent.profile.name} ({agent.profile.role.value})")
+    
+    async def submit_task(self, task_description: str, task_type: TaskType, 
+                            requirements: Dict[str, Any], priority: float = 0.5) -> str:
+        """提交任务"""
+        task_id = f"task_{int(time.time())}_{hashlib.md5(task_description.encode()).hexdigest()[:6]}"
+        
+        task = UnifiedTask(
+            task_id=task_id,
+            task_type=task_type,
+            description=task_description,
+            requirements=requirements,
+            priority=priority,
+            complexity=self._estimate_task_complexity(task_type, requirements),
+            required_capabilities=self._identify_required_capabilities(task_type)
+        )
+        
+        self.tasks[task_id] = task
+        self.task_queue.append(task)
+        self.system_metrics["total_tasks"] += 1
+        
+        self.logger.info(f"Task submitted: {task_id} ({task_type.value})")
+        
+        # 触发任务分配
+        await self._trigger_task_allocation(task)
+        
+        return task_id
+    
+    def _estimate_task_complexity(self, task_type: TaskType, requirements: Dict[str, Any]) -> float:
+        """估算任务复杂度"""
+        base_complexity = {
+            TaskType.SIMPLE_LOGIC: 0.2,
+            TaskType.COMBINATIONAL: 0.4,
+            TaskType.SEQUENTIAL: 0.6,
+            TaskType.COMPLEX_MODULE: 0.8,
+            TaskType.TESTBENCH: 0.5,
+            TaskType.OPTIMIZATION: 0.7
+        }
+        
+        complexity = base_complexity.get(task_type, 0.5)
+        
+        # 根据需求调整
+        if requirements.get("gates_count", 0) > 10:
+            complexity += 0.2
+        
+        return min(1.0, complexity)
+    
+    def _identify_required_capabilities(self, task_type: TaskType) -> Set[AgentCapability]:
+        """识别所需能力"""
+        capability_map = {
+            TaskType.SIMPLE_LOGIC: {AgentCapability.CODE_GENERATION},
+            TaskType.COMBINATIONAL: {AgentCapability.CODE_GENERATION, AgentCapability.VERIFICATION},
+            TaskType.SEQUENTIAL: {AgentCapability.DESIGN_OPTIMIZATION, AgentCapability.TIMING_ANALYSIS},
+            TaskType.COMPLEX_MODULE: {AgentCapability.SYSTEM_INTEGRATION, AgentCapability.VERIFICATION},
+            TaskType.TESTBENCH: {AgentCapability.TEST_GENERATION},
+            TaskType.OPTIMIZATION: {AgentCapability.CODE_OPTIMIZATION, AgentCapability.PERFORMANCE_ANALYSIS}
+        }
+        
+        return capability_map.get(task_type, set())
+    
+    async def _trigger_task_allocation(self, task: UnifiedTask):
+        """触发任务分配"""
+        # 通知所有智能体有新任务
+        notification = UnifiedMessage(
+            type="task_available",
+            content={
+                "task_id": task.task_id,
+                "task_type": task.task_type.value,
+                "complexity": task.complexity,
+                "priority": task.priority,
+                "required_capabilities": [cap.value for cap in task.required_capabilities]
+            },
+            sender="SystemCoordinator",
+            receivers=[agent.profile.name for agent in self.agents.values()],
+            priority=MessagePriority.HIGH if task.priority > 0.7 else MessagePriority.NORMAL,
+            intent=MessageIntent.TASK_ASSIGNMENT
+        )
+        
+        # 发送给所有智能体
+        for agent in self.agents.values():
+            await agent.handle_message(notification)
+    
+    async def _system_coordination_loop(self):
+        """系统协调循环"""
+        while self.running:
+            try:
+                # 监控系统健康
+                await self._monitor_system_health()
+                
+                # 处理待分配任务
+                await self._process_pending_tasks()
+                
+                # 更新系统指标
+                await self._update_system_metrics()
+                
+                # 知识共享
+                await self._facilitate_knowledge_sharing()
+                
+                await asyncio.sleep(10)  # 10秒循环一次
+                
+            except Exception as e:
+                self.logger.error(f"Error in system coordination loop: {e}")
+                await asyncio.sleep(10)
+    
+    async def _monitor_system_health(self):
+        """监控系统健康状况"""
+        # 检查智能体状态
+        overloaded_agents = []
+        idle_agents = []
+        
+        for agent_name, agent in self.agents.items():
+            if agent.profile.current_workload > 0.9:
+                overloaded_agents.append(agent_name)
+            elif agent.profile.current_workload < 0.2:
+                idle_agents.append(agent_name)
+        
+        # 负载均衡提醒
+        if overloaded_agents and idle_agents:
+            self.logger.warning(f"Load imbalance detected. Overloaded: {overloaded_agents}, Idle: {idle_agents}")
+            await self._suggest_load_balancing(overloaded_agents, idle_agents)
+    
+    async def _process_pending_tasks(self):
+        """处理待分配任务"""
+        if not self.task_queue:
+            return
+        
+        # 检查是否有任务长时间未分配
+        current_time = time.time()
+        for task in list(self.task_queue):
+            if current_time - task.created_at > 300 and task.status == "pending":  # 5分钟未分配
+                self.logger.warning(f"Task {task.task_id} pending for too long")
+                # 提高优先级重新通知
+                task.priority = min(1.0, task.priority + 0.2)
+                await self._trigger_task_allocation(task)
+    
+    async def _update_system_metrics(self):
+        """更新系统指标"""
+        if self.system_metrics["total_tasks"] > 0:
+            self.system_metrics["system_efficiency"] = (
+                self.system_metrics["completed_tasks"] / self.system_metrics["total_tasks"]
+            )
+        
+        # 计算平均任务完成时间
+        if self.completed_tasks:
+            avg_duration = sum(task.get_duration() for task in self.completed_tasks) / len(self.completed_tasks)
+            self.system_metrics["average_task_duration"] = avg_duration
+    
+    async def _facilitate_knowledge_sharing(self):
+        """促进知识共享"""
+        # 识别可共享的知识
+        valuable_knowledge = await self.knowledge_base.get_recent_insights()
+        
+        if valuable_knowledge:
+            # 创建知识共享消息
+            for knowledge_item in valuable_knowledge[:3]:  # 一次最多分享3个
+                share_message = UnifiedMessage(
+                    type="knowledge_sharing",
+                    content=knowledge_item,
+                    sender="SystemCoordinator",
+                    receivers=[agent.profile.name for agent in self.agents.values()],
+                    priority=MessagePriority.LOW,
+                    intent=MessageIntent.INFORMATION_SHARING
+                )
+                
+                # 发送给所有智能体
+                for agent in self.agents.values():
+                    if agent.profile.personality_traits.get(PersonalityTrait.CURIOUS, 0.5) > 0.6:
+                        await agent.handle_message(share_message)
+    
+    async def _suggest_load_balancing(self, overloaded: List[str], idle: List[str]):
+        """建议负载均衡"""
+        # 向过载智能体建议转移任务
+        for overloaded_agent in overloaded:
+            suggestion = UnifiedMessage(
+                type="load_balancing_suggestion",
+                content={
+                    "suggestion": "consider_task_delegation",
+                    "available_agents": idle,
+                    "reason": "workload_imbalance"
+                },
+                sender="SystemCoordinator",
+                receivers=[overloaded_agent],
+                priority=MessagePriority.HIGH,
+                intent=MessageIntent.SYSTEM_NOTIFICATION
+            )
+            
+            if overloaded_agent in self.agents:
+                await self.agents[overloaded_agent].handle_message(suggestion)
+    
+    # API方法
+    async def get_available_tasks(self) -> List[UnifiedTask]:
+        """获取可用任务列表"""
+        return [task for task in self.task_queue if task.status == "pending"]
+    
+    async def get_system_load(self) -> Dict[str, float]:
+        """获取系统负载"""
+        if not self.agents:
+            return {"average_load": 0.0, "peak_load": 0.0}
+        
+        loads = [agent.profile.current_workload for agent in self.agents.values()]
+        return {
+            "average_load": sum(loads) / len(loads) if loads else 0.0,
+            "peak_load": max(loads) if loads else 0.0
+        }
+    
+    async def get_peer_status(self) -> Dict[str, Dict[str, Any]]:
+        """获取同伴状态"""
+        return {
+            name: {
+                "role": agent.profile.role.value,
+                "workload": agent.profile.current_workload,
+                "availability": agent.profile.availability,
+                "capabilities": {cap.value: level for cap, level in agent.profile.capabilities.items()},
+                "communication_style": agent.profile.communication_style.value
+            }
+            for name, agent in self.agents.items()
+        }
+    
+    async def find_agents_with_capabilities(self, required_capabilities: Set[AgentCapability]) -> List[str]:
+        """查找具有特定能力的智能体"""
+        matching_agents = []
+        
+        for agent_name, agent in self.agents.items():
+            agent_caps = set(agent.profile.capabilities.keys())
+            if required_capabilities.issubset(agent_caps):
+                # 检查能力等级
+                sufficient_level = all(
+                    agent.profile.get_capability_level(cap) >= 0.6
+                    for cap in required_capabilities
+                )
+                if sufficient_level:
+                    matching_agents.append(agent_name)
+        
+        return matching_agents
+    
+    async def request_task_assignment(self, agent_name: str, task_id: str):
+        """处理任务分配请求"""
+        if task_id not in self.tasks or agent_name not in self.agents:
+            return
+        
+        task = self.tasks[task_id]
+        agent = self.agents[agent_name]
+        
+        # 检查智能体是否能处理该任务
+        if agent.profile.can_handle_task(task.task_type, task.complexity):
+            # 分配任务
+            task.assigned_agents.append(agent_name)
+            task.status = "assigned"
+            task.started_at = time.time()
+            
+            # 更新智能体工作负载
+            agent.profile.current_workload += task.complexity * 0.5
+            
+            # 从队列中移除
+            if task in self.task_queue:
+                self.task_queue.remove(task)
+            
+            self.logger.info(f"Task {task_id} assigned to {agent_name}")
+            
+            # 通知智能体
+            confirmation = UnifiedMessage(
+                type="task_assignment_confirmed",
+                content={
+                    "task_id": task_id,
+                    "task": asdict(task)
+                },
+                sender="SystemCoordinator",
+                receivers=[agent_name],
+                priority=MessagePriority.HIGH,
+                intent=MessageIntent.TASK_ASSIGNMENT
+            )
+            
+            await agent.handle_message(confirmation)
 
 # ============================================================================
 # 14. 知识库
 # ============================================================================
 
 class KnowledgeBase:
-   """系统知识库"""
+    """系统知识库"""
    
-   def __init__(self):
-       self.knowledge_items: deque = deque(maxlen=1000)
-       self.insights: deque = deque(maxlen=100)
-       self.best_practices: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-   
-   async def add_knowledge(self, knowledge_type: str, content: Any, source: str):
-       """添加知识"""
-       knowledge_item = {
-           "type": knowledge_type,
-           "content": content,
-           "source": source,
-           "timestamp": time.time(),
-           "usage_count": 0
-       }
-       
-       self.knowledge_items.append(knowledge_item)
-       
-       # 识别洞察
-       if knowledge_type == "task_completion":
-           await self._extract_task_insights(content)
-   
-   async def get_recent_insights(self, limit: int = 5) -> List[Dict[str, Any]]:
-       """获取最近的洞察"""
-       recent_insights = list(self.insights)[-limit:]
-       
-       # 过滤掉已经分享过多次的
-       filtered_insights = []
-       for insight in recent_insights:
-           if insight.get("share_count", 0) < 3:
-               insight["share_count"] = insight.get("share_count", 0) + 1
-               filtered_insights.append(insight)
-       
-       return filtered_insights
-   
-   async def _extract_task_insights(self, task_data: Dict[str, Any]):
-       """从任务数据提取洞察"""
-       if task_data.get("success") and task_data.get("duration"):
-           # 记录成功模式
-           insight = {
-               "type": "success_pattern",
-               "task_type": task_data.get("task_type"),
-               "approach": task_data.get("approach"),
-               "duration": task_data.get("duration"),
-               "timestamp": time.time()
-           }
-           
-           self.insights.append(insight)
-           
-           # 更新最佳实践
-           task_type = task_data.get("task_type", "general")
-           self.best_practices[task_type].append({
-               "approach": task_data.get("approach"),
-               "success_rate": 1.0,
-               "average_duration": task_data.get("duration")
-           })
+    def __init__(self):
+        self.knowledge_items: deque = deque(maxlen=1000)
+        self.insights: deque = deque(maxlen=100)
+        self.best_practices: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    
+    async def add_knowledge(self, knowledge_type: str, content: Any, source: str):
+        """添加知识"""
+        knowledge_item = {
+            "type": knowledge_type,
+            "content": content,
+            "source": source,
+            "timestamp": time.time(),
+            "usage_count": 0
+        }
+        
+        self.knowledge_items.append(knowledge_item)
+        
+        # 识别洞察
+        if knowledge_type == "task_completion":
+            await self._extract_task_insights(content)
+    
+    async def get_recent_insights(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """获取最近的洞察"""
+        recent_insights = list(self.insights)[-limit:]
+        
+        # 过滤掉已经分享过多次的
+        filtered_insights = []
+        for insight in recent_insights:
+            if insight.get("share_count", 0) < 3:
+                insight["share_count"] = insight.get("share_count", 0) + 1
+                filtered_insights.append(insight)
+        
+        return filtered_insights
+    
+    async def _extract_task_insights(self, task_data: Dict[str, Any]):
+        """从任务数据提取洞察"""
+        if task_data.get("success") and task_data.get("duration"):
+            # 记录成功模式
+            insight = {
+                "type": "success_pattern",
+                "task_type": task_data.get("task_type"),
+                "approach": task_data.get("approach"),
+                "duration": task_data.get("duration"),
+                "timestamp": time.time()
+            }
+            
+            self.insights.append(insight)
+            
+            # 更新最佳实践
+            task_type = task_data.get("task_type", "general")
+            self.best_practices[task_type].append({
+                "approach": task_data.get("approach"),
+                "success_rate": 1.0,
+                "average_duration": task_data.get("duration")
+            })
 
 # ============================================================================
 # 15. 任务处理器 - 具体实现
 # ============================================================================
 
 class VerilogTaskProcessor:
-   """Verilog任务处理器"""
-   
-   def __init__(self, agent: AutonomousAgent):
-       self.agent = agent
-       self.logger = logging.getLogger(f"TaskProcessor.{agent.profile.name}")
-   
-   async def process_task(self, task: UnifiedTask) -> Dict[str, Any]:
-       """处理Verilog任务"""
-       result = {
-           "task_id": task.task_id,
-           "success": False,
-           "artifacts": {},
-           "duration": 0.0
-       }
-       
-       start_time = time.time()
-       
-       try:
-           if task.task_type == TaskType.SIMPLE_LOGIC:
-               artifacts = await self._generate_simple_logic(task)
-           elif task.task_type == TaskType.COMBINATIONAL:
-               artifacts = await self._generate_combinational_logic(task)
-           elif task.task_type == TaskType.SEQUENTIAL:
-               artifacts = await self._generate_sequential_logic(task)
-           else:
-               artifacts = await self._generate_generic_module(task)
-           
-           result["artifacts"] = artifacts
-           result["success"] = True
-           
-       except Exception as e:
-           self.logger.error(f"Task processing failed: {e}")
-           result["error"] = str(e)
-       
-       result["duration"] = time.time() - start_time
-       return result
-   
-   async def _generate_simple_logic(self, task: UnifiedTask) -> Dict[str, str]:
-       """生成简单逻辑"""
-       requirements = task.requirements
-       
-       # 构建提示
-       prompt = f"""Generate Verilog code for: {task.description}
-Requirements: {json.dumps(requirements, indent=2)}
-Use structural Verilog with basic gates."""
-       
-       # 调用LLM（模拟）
-       code = await self._call_llm_for_code(prompt)
-       
-       return {"verilog_code": code}
-   
-   async def _call_llm_for_code(self, prompt: str) -> str:
-       """调用LLM生成代码（模拟）"""
-       await asyncio.sleep(1)
-       
-       # 模拟生成的代码
-       return """module generated_module(
-   input wire a,
-   input wire b,
-   output wire out
-);
-   and gate1(out, a, b);
-endmodule"""
+    """Verilog任务处理器"""
+    
+    def __init__(self, agent: AutonomousAgent):
+        self.agent = agent
+        self.logger = logging.getLogger(f"TaskProcessor.{agent.profile.name}")
+    
+    async def process_task(self, task: UnifiedTask) -> Dict[str, Any]:
+        """处理Verilog任务"""
+        result = {
+            "task_id": task.task_id,
+            "success": False,
+            "artifacts": {},
+            "duration": 0.0
+        }
+        
+        start_time = time.time()
+        
+        try:
+            if task.task_type == TaskType.SIMPLE_LOGIC:
+                artifacts = await self._generate_simple_logic(task)
+            elif task.task_type == TaskType.COMBINATIONAL:
+                artifacts = await self._generate_combinational_logic(task)
+            elif task.task_type == TaskType.SEQUENTIAL:
+                artifacts = await self._generate_sequential_logic(task)
+            else:
+                artifacts = await self._generate_generic_module(task)
+            
+            result["artifacts"] = artifacts
+            result["success"] = True
+            
+        except Exception as e:
+            self.logger.error(f"Task processing failed: {e}")
+            result["error"] = str(e)
+        
+        result["duration"] = time.time() - start_time
+        return result
+    
+    async def _generate_simple_logic(self, task: UnifiedTask) -> Dict[str, str]:
+        """生成简单逻辑"""
+        requirements = task.requirements
+        
+        # 构建提示
+        prompt = f"""Generate Verilog code for: {task.description}
+    Requirements: {json.dumps(requirements, indent=2)}
+    Use structural Verilog with basic gates."""
+        
+        # 调用LLM（模拟）
+        code = await self._call_llm_for_code(prompt)
+        
+        return {"verilog_code": code}
+    
+    async def _call_llm_for_code(self, prompt: str) -> str:
+        """调用LLM生成代码（模拟）"""
+        await asyncio.sleep(1)
+        
+        # 模拟生成的代码
+        return """module generated_module(
+    input wire a,
+    input wire b,
+    output wire out
+    );
+    and gate1(out, a, b);
+    endmodule"""
 
 # ============================================================================
 # 16. 框架主类
 # ============================================================================
 
 class UnifiedAutonomousFramework:
-   """统一的自主Verilog框架"""
+    """统一的自主Verilog框架"""
    
-   def __init__(self):
-       self.system_coordinator = SystemCoordinator()
-       self.agents: Dict[str, AutonomousAgent] = {}
-       self.logger = logging.getLogger("UnifiedAutonomousFramework")
-       
-       self.running = False
-       self.startup_time = None
-       
-       self.logger.info("UnifiedAutonomousFramework initialized")
-   
-   async def initialize(self):
-       """初始化框架"""
-       self.logger.info("Initializing Unified Autonomous Framework")
-       
-       # 创建默认智能体团队
-       await self._create_default_agent_team()
-       
-       self.logger.info(f"Framework initialized with {len(self.agents)} agents")
-   
-   async def _create_default_agent_team(self):
-       """创建默认智能体团队"""
-       team_configs = [
-           {
-               "name": "AliceCoderAgent",
-               "role": AgentRole.CODE_GENERATOR,
-               "personality": {
-                   CommunicationStyle.CREATIVE,
-                   PersonalityTrait.PROACTIVE: 0.8,
-                   PersonalityTrait.CREATIVE: 0.9,
-                   PersonalityTrait.CURIOUS: 0.7
-               }
-           },
-           {
-               "name": "BobReviewerAgent",
-               "role": AgentRole.CODE_REVIEWER,
-               "personality": {
-                   CommunicationStyle.ANALYTICAL,
-                   PersonalityTrait.ANALYTICAL: 0.9,
-                   PersonalityTrait.DETAIL_ORIENTED: 0.9,
-                   PersonalityTrait.HELPFUL: 0.8
-               }
-           },
-           {
-               "name": "CharlieExecutorAgent",
-               "role": AgentRole.CODE_EXECUTOR,
-               "personality": {
-                   CommunicationStyle.DIRECTIVE,
-                   PersonalityTrait.FOCUSED: 0.9,
-                   PersonalityTrait.RELIABLE: 0.9,
-                   PersonalityTrait.EFFICIENT: 0.8
-               }
-           }
-       ]
-       
-       for config in team_configs:
-           profile = UnifiedAgentProfile(
-               name=config["name"],
-               role=config["role"],
-               communication_style=config["personality"][CommunicationStyle.__name__],
-               personality_traits=config["personality"]
-           )
-           
-           # 添加角色特定能力
-           self._add_role_capabilities(profile)
-           
-           # 创建智能体
-           agent = AutonomousAgent(profile, self.system_coordinator)
-           
-           # 注册到系统
-           self.system_coordinator.register_agent(agent)
-           self.agents[config["name"]] = agent
-   
-   def _add_role_capabilities(self, profile: UnifiedAgentProfile):
-       """添加角色特定能力"""
-       if profile.role == AgentRole.CODE_GENERATOR:
-           profile.capabilities = {
-               AgentCapability.CODE_GENERATION: 0.9,
-               AgentCapability.CODE_DEBUGGING: 0.7,
-               AgentCapability.DOCUMENTATION: 0.6
-           }
-       elif profile.role == AgentRole.CODE_REVIEWER:
-           profile.capabilities = {
-               AgentCapability.CODE_REVIEW: 0.9,
-               AgentCapability.ERROR_ANALYSIS: 0.8,
-               AgentCapability.CODE_OPTIMIZATION: 0.7
-           }
-       elif profile.role == AgentRole.CODE_EXECUTOR:
-           profile.capabilities = {
-               AgentCapability.COMPILATION: 0.9,
-               AgentCapability.SIMULATION: 0.9,
-               AgentCapability.TEST_GENERATION: 0.6
-           }
-   
-   async def start(self):
-       """启动框架"""
-       if self.running:
-           return
-       
-       self.running = True
-       self.startup_time = time.time()
-       
-       self.logger.info("Starting Unified Autonomous Framework")
-       
-       # 启动系统协调器
-       await self.system_coordinator.start_system()
-       
-       self.logger.info("Framework started successfully")
-   
-   async def stop(self):
-       """停止框架"""
-       if not self.running:
-           return
-       
-       self.running = False
-       
-       self.logger.info("Stopping Unified Autonomous Framework")
-       
-       # 停止系统协调器
-       await self.system_coordinator.stop_system()
-       
-       self.logger.info("Framework stopped")
-   
-   async def submit_task(self, description: str, task_type: str, 
-                        requirements: Dict[str, Any], priority: float = 0.5) -> str:
-       """提交任务"""
-       if not self.running:
-           raise RuntimeError("Framework is not running")
-       
-       try:
-           task_type_enum = TaskType(task_type)
-       except ValueError:
-           raise ValueError(f"Invalid task type: {task_type}")
-       
-       return await self.system_coordinator.submit_task(
-           description, task_type_enum, requirements, priority
-       )
-   
-   def get_system_status(self) -> Dict[str, Any]:
-       """获取系统状态"""
-       return {
-           "running": self.running,
-           "uptime": time.time() - self.startup_time if self.startup_time else 0,
-           "agents": {
-               name: {
-                   "role": agent.profile.role.value,
-                   "workload": agent.profile.current_workload,
-                   "personality": agent.profile.communication_style.value,
-                   "active_conversations": len(agent.active_conversations)
-               }
-               for name, agent in self.agents.items()
-           },
-           "system_metrics": self.system_coordinator.system_metrics,
-           "task_queue_size": len(self.system_coordinator.task_queue)
-       }
+    def __init__(self):
+        self.system_coordinator = SystemCoordinator()
+        self.agents: Dict[str, AutonomousAgent] = {}
+        self.logger = logging.getLogger("UnifiedAutonomousFramework")
+        
+        self.running = False
+        self.startup_time = None
+        
+        self.logger.info("UnifiedAutonomousFramework initialized")
+    
+    async def initialize(self):
+        """初始化框架"""
+        self.logger.info("Initializing Unified Autonomous Framework")
+        
+        # 创建默认智能体团队
+        await self._create_default_agent_team()
+        
+        self.logger.info(f"Framework initialized with {len(self.agents)} agents")
+    
+    async def _create_default_agent_team(self):
+        """创建默认智能体团队"""
+        team_configs = [
+            {
+                "name": "AliceCoderAgent",
+                "role": AgentRole.CODE_GENERATOR,
+                "personality": {
+                    CommunicationStyle.CREATIVE,
+                    PersonalityTrait.PROACTIVE: 0.8,
+                    PersonalityTrait.CREATIVE: 0.9,
+                    PersonalityTrait.CURIOUS: 0.7
+                }
+            },
+            {
+                "name": "BobReviewerAgent",
+                "role": AgentRole.CODE_REVIEWER,
+                "personality": {
+                    CommunicationStyle.ANALYTICAL,
+                    PersonalityTrait.ANALYTICAL: 0.9,
+                    PersonalityTrait.DETAIL_ORIENTED: 0.9,
+                    PersonalityTrait.HELPFUL: 0.8
+                }
+            },
+            {
+                "name": "CharlieExecutorAgent",
+                "role": AgentRole.CODE_EXECUTOR,
+                "personality": {
+                    CommunicationStyle.DIRECTIVE,
+                    PersonalityTrait.FOCUSED: 0.9,
+                    PersonalityTrait.RELIABLE: 0.9,
+                    PersonalityTrait.EFFICIENT: 0.8
+                }
+            }
+        ]
+        
+        for config in team_configs:
+            profile = UnifiedAgentProfile(
+                name=config["name"],
+                role=config["role"],
+                communication_style=config["personality"][CommunicationStyle.__name__],
+                personality_traits=config["personality"]
+            )
+            
+            # 添加角色特定能力
+            self._add_role_capabilities(profile)
+            
+            # 创建智能体
+            agent = AutonomousAgent(profile, self.system_coordinator)
+            
+            # 注册到系统
+            self.system_coordinator.register_agent(agent)
+            self.agents[config["name"]] = agent
+    
+    def _add_role_capabilities(self, profile: UnifiedAgentProfile):
+        """添加角色特定能力"""
+        if profile.role == AgentRole.CODE_GENERATOR:
+            profile.capabilities = {
+                AgentCapability.CODE_GENERATION: 0.9,
+                AgentCapability.CODE_DEBUGGING: 0.7,
+                AgentCapability.DOCUMENTATION: 0.6
+            }
+        elif profile.role == AgentRole.CODE_REVIEWER:
+            profile.capabilities = {
+                AgentCapability.CODE_REVIEW: 0.9,
+                AgentCapability.ERROR_ANALYSIS: 0.8,
+                AgentCapability.CODE_OPTIMIZATION: 0.7
+            }
+        elif profile.role == AgentRole.CODE_EXECUTOR:
+            profile.capabilities = {
+                AgentCapability.COMPILATION: 0.9,
+                AgentCapability.SIMULATION: 0.9,
+                AgentCapability.TEST_GENERATION: 0.6
+            }
+    
+    async def start(self):
+        """启动框架"""
+        if self.running:
+            return
+        
+        self.running = True
+        self.startup_time = time.time()
+        
+        self.logger.info("Starting Unified Autonomous Framework")
+        
+        # 启动系统协调器
+        await self.system_coordinator.start_system()
+        
+        self.logger.info("Framework started successfully")
+    
+    async def stop(self):
+        """停止框架"""
+        if not self.running:
+            return
+        
+        self.running = False
+        
+        self.logger.info("Stopping Unified Autonomous Framework")
+        
+        # 停止系统协调器
+        await self.system_coordinator.stop_system()
+        
+        self.logger.info("Framework stopped")
+    
+    async def submit_task(self, description: str, task_type: str, 
+                            requirements: Dict[str, Any], priority: float = 0.5) -> str:
+        """提交任务"""
+        if not self.running:
+            raise RuntimeError("Framework is not running")
+        
+        try:
+            task_type_enum = TaskType(task_type)
+        except ValueError:
+            raise ValueError(f"Invalid task type: {task_type}")
+        
+        return await self.system_coordinator.submit_task(
+            description, task_type_enum, requirements, priority
+        )
+    
+    def get_system_status(self) -> Dict[str, Any]:
+        """获取系统状态"""
+        return {
+            "running": self.running,
+            "uptime": time.time() - self.startup_time if self.startup_time else 0,
+            "agents": {
+                name: {
+                    "role": agent.profile.role.value,
+                    "workload": agent.profile.current_workload,
+                    "personality": agent.profile.communication_style.value,
+                    "active_conversations": len(agent.active_conversations)
+                }
+                for name, agent in self.agents.items()
+            },
+            "system_metrics": self.system_coordinator.system_metrics,
+            "task_queue_size": len(self.system_coordinator.task_queue)
+        }
 
 # ============================================================================
 # 17. 使用示例
 # ============================================================================
 
 async def main():
-   """主函数示例"""
-   logging.basicConfig(
-       level=logging.INFO,
-       format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-   )
-   
-   # 创建框架
-   framework = UnifiedAutonomousFramework()
-   
-   # 初始化
-   await framework.initialize()
-   
-   # 启动
-   await framework.start()
-   
-   # 提交一些任务
-   task1_id = await framework.submit_task(
-       description="Design a 4-bit counter with enable and reset",
-       task_type="sequential",
-       requirements={
-           "inputs": ["clk", "reset", "enable"],
-           "outputs": ["count[3:0]"],
-           "functionality": "synchronous_counter"
-       },
-       priority=0.8
-   )
-   
-   task2_id = await framework.submit_task(
-       description="Create a 2-input AND gate",
-       task_type="simple_logic",
-       requirements={
-           "inputs": ["a", "b"],
-           "outputs": ["out"],
-           "gates": ["and"]
-       },
-       priority=0.6
-   )
-   
-   # 运行一段时间
-   await asyncio.sleep(30)
-   
-   # 检查状态
-   status = framework.get_system_status()
-   print(f"System Status: {json.dumps(status, indent=2)}")
-   
-   # 停止
-   await framework.stop()
+    """主函数示例"""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # 创建框架
+    framework = UnifiedAutonomousFramework()
+    
+    # 初始化
+    await framework.initialize()
+    
+    # 启动
+    await framework.start()
+    
+    # 提交一些任务
+    task1_id = await framework.submit_task(
+        description="Design a 4-bit counter with enable and reset",
+        task_type="sequential",
+        requirements={
+            "inputs": ["clk", "reset", "enable"],
+            "outputs": ["count[3:0]"],
+            "functionality": "synchronous_counter"
+        },
+        priority=0.8
+    )
+    
+    task2_id = await framework.submit_task(
+        description="Create a 2-input AND gate",
+        task_type="simple_logic",
+        requirements={
+            "inputs": ["a", "b"],
+            "outputs": ["out"],
+            "gates": ["and"]
+        },
+        priority=0.6
+    )
+    
+    # 运行一段时间
+    await asyncio.sleep(30)
+    
+    # 检查状态
+    status = framework.get_system_status()
+    print(f"System Status: {json.dumps(status, indent=2)}")
+    
+    # 停止
+    await framework.stop()
 
 if __name__ == "__main__":
    asyncio.run(main())

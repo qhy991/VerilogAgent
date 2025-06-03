@@ -1,0 +1,367 @@
+# Auto-Dialogue Multi-Agent System - Production Configuration
+# 生产环境配置文件
+
+# 实验基本信息
+name: "production_auto_dialogue"
+description: "Production configuration for auto-dialogue multi-agent Verilog design system"
+
+# LLM集成配置
+llm:
+  provider: "openai"                    # 支持: openai, anthropic, local
+  base_url: "https://api.openai.com/v1" # API端点
+  api_key: "${OPENAI_API_KEY}"          # 从环境变量获取，或直接填写
+  model: "gpt-4"                        # 模型选择: gpt-4, gpt-3.5-turbo, claude-3-opus
+  temperature: 0.7                      # 创造性 (0.0-1.0)
+  max_tokens: 2000                      # 最大输出token数
+  timeout: 60                           # 请求超时时间（秒）
+  retry_times: 3                        # 重试次数
+  retry_delay: 1                        # 重试延迟（秒）
+
+# 系统核心配置
+system:
+  max_agents: 15                        # 最大智能体数量
+  task_timeout: 600                     # 任务超时时间（秒）
+  coordination_interval: 10             # 协调检查间隔（秒）
+  enable_learning: true                 # 启用学习机制
+  enable_collaboration: true            # 启用协作机制
+  load_balance_enabled: true            # 启用负载均衡
+  knowledge_sharing_interval: 300       # 知识共享间隔（秒）
+
+# 对话管理配置
+dialogue:
+  max_rounds: 10                        # 最大对话轮次
+  timeout_minutes: 30                   # 对话超时时间（分钟）
+  auto_escalation: true                 # 自动干预机制
+  intervention_threshold: 3             # 干预触发阈值（连续失败次数）
+  allow_parallel_dialogues: true       # 允许并行对话
+  max_parallel_dialogues: 5            # 最大并行对话数
+
+# 智能体配置
+agents:
+  # 高级代码生成智能体
+  senior_coder:
+    name: "SeniorAlice"
+    role: "code_generator"
+    communication_style: "creative"
+    personality:
+      creative: 0.9                     # 创造性
+      proactive: 0.8                    # 主动性
+      collaborative: 0.8                # 协作性
+      ambitious: 0.7                    # 进取心
+      detail_oriented: 0.7              # 细节关注
+      curious: 0.8                      # 好奇心
+    capabilities:
+      code_generation: 0.95
+      design_optimization: 0.8
+      system_integration: 0.7
+      debugging: 0.8
+    learning_rate: 0.2
+    specializations: ["complex_modules", "optimization", "system_design"]
+    
+  # 初级代码生成智能体
+  junior_coder:
+    name: "JuniorDave"
+    role: "code_generator"
+    communication_style: "collaborative"
+    personality:
+      curious: 0.9
+      helpful: 0.8
+      learning_oriented: 0.9
+      cautious: 0.6
+      team_player: 0.9
+    capabilities:
+      code_generation: 0.6
+      documentation: 0.8
+      debugging: 0.5
+    learning_rate: 0.3
+    mentor: "SeniorAlice"                # 指定导师
+    specializations: ["simple_logic", "documentation"]
+    
+  # 专业审查智能体
+  specialist_reviewer:
+    name: "SpecialistEve"
+    role: "code_reviewer"
+    communication_style: "analytical"
+    personality:
+      analytical: 0.95
+      detail_oriented: 0.95
+      critical: 0.9
+      helpful: 0.8
+      reliable: 0.9
+    capabilities:
+      code_review: 0.95
+      error_analysis: 0.9
+      code_optimization: 0.8
+      verification: 0.85
+      timing_analysis: 0.8
+    learning_rate: 0.15
+    specializations: ["timing_analysis", "verification", "quality_assurance"]
+    
+  # 性能执行智能体
+  performance_executor:
+    name: "PerfCarl"
+    role: "code_executor"
+    communication_style: "directive"
+    personality:
+      focused: 0.9
+      efficient: 0.95
+      reliable: 0.9
+      detail_oriented: 0.8
+      proactive: 0.7
+    capabilities:
+      compilation: 0.95
+      simulation: 0.9
+      test_generation: 0.7
+      performance_analysis: 0.9
+      synthesis: 0.8
+    learning_rate: 0.1
+    specializations: ["performance_optimization", "synthesis", "testing"]
+
+# 任务配置示例（可用于测试）
+tasks:
+  - name: "UART Transceiver"
+    type: "collaborative_design"
+    task_type: "complex_module"
+    collaboration_required: true
+    priority: 0.9
+    requirements:
+      modules: ["uart_tx", "uart_rx", "baud_generator", "fifo"]
+      baud_rates: [9600, 115200]
+      data_bits: [7, 8]
+      parity: ["none", "even", "odd"]
+      flow_control: true
+    description: "Design a complete UART transceiver with configurable parameters"
+    
+  - name: "SPI Master Controller"
+    type: "complex_design"
+    task_type: "complex_module"
+    priority: 0.8
+    requirements:
+      modes: ["mode0", "mode1", "mode2", "mode3"]
+      data_width: [8, 16, 32]
+      max_frequency: "50MHz"
+      features: ["multi_slave", "dma_support"]
+    description: "Design an SPI master controller with multiple modes and DMA support"
+
+# Verilog工具链配置
+toolchain:
+  work_dir: "./verilog_workspace"       # 工作目录
+  cleanup_after_task: true             # 任务完成后清理
+  backup_successful_designs: true      # 备份成功的设计
+  
+  # 编译器配置
+  compiler:
+    preferred: "icarus"                 # 首选编译器: icarus, verilator
+    icarus_options: ["-g2012"]          # Icarus Verilog选项
+    verilator_options: ["--lint-only"]  # Verilator选项
+    
+  # 仿真配置
+  simulation:
+    timeout: 30                         # 仿真超时（秒）
+    waveform_format: "vcd"              # 波形格式: vcd, fst
+    enable_coverage: true               # 启用覆盖率分析
+    max_simulation_time: 10000          # 最大仿真时间单位
+    
+  # 综合配置
+  synthesis:
+    enable: true                        # 启用综合
+    tool: "yosys"                       # 综合工具
+    target: "ice40"                     # 目标器件系列
+    optimization_level: 2               # 优化级别
+    
+  # 波形查看器配置
+  waveform_viewer:
+    tool: "gtkwave"                     # 波形查看器
+    auto_open: false                    # 自动打开波形
+    save_images: false                  # 保存波形图片
+
+# 持久化存储配置
+persistence:
+  enable: true                          # 启用持久化
+  database_path: "./data/system.db"    # 数据库路径
+  backup_interval: 3600                # 备份间隔（秒）
+  max_backup_files: 10                 # 最大备份文件数
+  
+  # 数据保留策略
+  retention:
+    agent_profiles: "1year"             # 智能体配置保留时间
+    task_history: "6months"             # 任务历史保留时间
+    conversation_logs: "3months"        # 对话日志保留时间
+    learning_records: "1year"           # 学习记录保留时间
+
+# Web监控配置
+monitoring:
+  enable: true                          # 启用Web监控
+  port: 5000                           # Web服务端口
+  host: "0.0.0.0"                      # 绑定地址
+  enable_real_time_updates: true       # 启用实时更新
+  update_interval: 5                   # 更新间隔（秒）
+  
+  # 安全配置
+  security:
+    enable_auth: false                  # 启用认证（生产环境建议true）
+    username: "admin"                   # 用户名
+    password: "secure_password"         # 密码
+    session_timeout: 3600               # 会话超时（秒）
+    
+  # 可视化配置
+  visualization:
+    enable_agent_network: true          # 启用智能体网络图
+    enable_task_flow: true              # 启用任务流程图
+    enable_performance_charts: true     # 启用性能图表
+    chart_history_length: 100           # 图表历史长度
+
+# 高级学习配置
+learning:
+  enable_reinforcement_learning: true  # 启用强化学习
+  enable_pattern_recognition: true     # 启用模式识别
+  enable_knowledge_transfer: true      # 启用知识迁移
+  enable_collective_intelligence: true # 启用集体智能
+  
+  # 强化学习参数
+  reinforcement:
+    learning_rate: 0.1                  # 学习率
+    discount_factor: 0.9                # 折扣因子
+    exploration_rate: 0.1               # 探索率
+    update_frequency: 10                # 更新频率
+    
+  # 模式识别参数
+  pattern_recognition:
+    min_pattern_length: 3               # 最小模式长度
+    confidence_threshold: 0.8           # 置信度阈值
+    max_patterns_stored: 1000           # 最大存储模式数
+    
+  # 知识迁移参数
+  knowledge_transfer:
+    similarity_threshold: 0.6           # 相似度阈值
+    transfer_confidence: 0.7            # 迁移置信度
+    max_transfer_attempts: 3            # 最大迁移尝试次数
+    
+  # 集体智能参数
+  collective_intelligence:
+    contribution_weight: 0.3            # 贡献权重
+    consensus_threshold: 0.7            # 共识阈值
+    knowledge_decay_rate: 0.1           # 知识衰减率
+
+# 日志配置
+logging:
+  level: "INFO"                         # 日志级别: DEBUG, INFO, WARNING, ERROR
+  log_dir: "./logs"                     # 日志目录
+  max_file_size: "10MB"                 # 最大文件大小
+  backup_count: 10                      # 备份文件数量
+  
+  # 分类日志配置
+  categories:
+    dialogue: 
+      level: "INFO"
+      file: "dialogue.log"
+    agent_activity:
+      level: "INFO" 
+      file: "agents.log"
+    llm_calls:
+      level: "DEBUG"
+      file: "llm.log"
+    errors:
+      level: "ERROR"
+      file: "errors.log"
+
+# 性能优化配置
+performance:
+  # 并发配置
+  concurrency:
+    max_concurrent_llm_calls: 5         # 最大并发LLM调用
+    max_concurrent_simulations: 3       # 最大并发仿真
+    agent_pool_size: 10                 # 智能体池大小
+    
+  # 缓存配置
+  caching:
+    enable_llm_cache: true              # 启用LLM缓存
+    enable_compilation_cache: true      # 启用编译缓存
+    cache_ttl: 3600                     # 缓存生存时间（秒）
+    max_cache_size: "100MB"             # 最大缓存大小
+    
+  # 资源限制
+  limits:
+    max_memory_usage: "2GB"             # 最大内存使用
+    max_disk_usage: "10GB"              # 最大磁盘使用
+    max_process_time: 300               # 最大进程时间（秒）
+
+# 安全配置
+security:
+  # 代码执行安全
+  code_execution:
+    enable_sandboxing: true             # 启用沙箱
+    allowed_tools: ["iverilog", "verilator", "yosys"]  # 允许的工具
+    max_execution_time: 60              # 最大执行时间（秒）
+    resource_limits:
+      max_memory: "500MB"               # 最大内存
+      max_cpu_time: 30                  # 最大CPU时间（秒）
+      max_file_size: "10MB"             # 最大文件大小
+      
+  # API安全
+  api_security:
+    rate_limiting: true                 # 启用速率限制
+    max_requests_per_minute: 60         # 每分钟最大请求数
+    enable_ip_whitelist: false          # 启用IP白名单
+    allowed_ips: []                     # 允许的IP列表
+
+# 实验参数
+experiment:
+  duration: 3600                        # 实验持续时间（秒）
+  auto_save_interval: 300               # 自动保存间隔（秒）
+  
+  # 指标收集
+  metrics_collection:
+    - task_completion_time
+    - collaboration_effectiveness  
+    - code_quality_scores
+    - learning_progression
+    - agent_performance
+    - system_resource_usage
+    
+  # 输出配置
+  output:
+    results_dir: "./experiment_results"  # 结果目录
+    save_intermediate_results: true     # 保存中间结果
+    generate_reports: true              # 生成报告
+    export_format: ["json", "csv"]      # 导出格式
+
+# 环境变量配置
+environment:
+  # 必需的环境变量
+  required_vars:
+    - OPENAI_API_KEY                    # OpenAI API密钥
+  
+  # 可选的环境变量
+  optional_vars:
+    ANTHROPIC_API_KEY: ""               # Anthropic API密钥
+    VERILOG_TOOLS_PATH: "/usr/bin"      # Verilog工具路径
+    WORKSPACE_ROOT: "./workspace"       # 工作空间根目录
+
+# 扩展配置
+extensions:
+  # 插件系统
+  plugins:
+    enable: false                       # 启用插件系统
+    plugins_dir: "./plugins"            # 插件目录
+    auto_load: true                     # 自动加载插件
+    
+  # 自定义智能体
+  custom_agents:
+    enable: false                       # 启用自定义智能体
+    agents_dir: "./custom_agents"       # 自定义智能体目录
+    
+  # 外部工具集成
+  external_tools:
+    enable_formal_verification: false  # 启用形式化验证
+    enable_static_analysis: false      # 启用静态分析
+    enable_ai_optimization: false      # 启用AI优化
+
+# 调试配置（开发环境使用）
+debug:
+  enable: false                         # 启用调试模式
+  verbose_logging: false               # 详细日志
+  save_llm_conversations: false       # 保存LLM对话
+  enable_profiling: false              # 启用性能分析
+  mock_llm_responses: false            # 模拟LLM响应
+  single_step_mode: false              # 单步模式
